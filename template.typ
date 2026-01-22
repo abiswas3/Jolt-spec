@@ -14,7 +14,9 @@
 ) = {
   // Document metadata
   set document(author: authors, title: title)
-  
+  // Switch to Cascadia Code for both
+// inline and block raw.
+
   // Page setup
   set page(
     margin: 1in,
@@ -31,7 +33,8 @@
   
   // Heading numbering
   set heading(numbering: "1.1.a.i.")
-  
+  show heading: set block(below: 1em)
+
   // Paragraph settings
   set par(justify: true)
   
