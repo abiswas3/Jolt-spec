@@ -27,7 +27,7 @@
 // #import "code_template.typ": conf
 // #show: conf.with(cols: 92)
 
-#include "chapters/chap1.typ"
+#include "chapters/intro.typ"
 // #include "chapters/chap2.typ"
 #include "chapters/compilations.typ"
 #include "chapters/emulation.typ"
