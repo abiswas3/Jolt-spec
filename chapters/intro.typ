@@ -48,27 +48,33 @@ If the proof is deemed valid, the user could just accept Jolt's claimed answer a
 Alternatively, if Jolt tried to deviate from the prescribed computation in a completely arbitrary manner, the user should not accept Jolts claim.
 This is the premise of the Jolt zk-VM.
 Our job in this document will be to formally prove that the above conditions hold i.e. the proof system is sound and complete.
+
 == Overview Of Jolt Components 
 
-The Jolt code can be partitioned in a few separate logical components as described below. 
+The Jolt zk-VM can be logically partitioned into the components described in the following subsections. 
+Overall the architecture involves 
+
+- Compiling high level guest programs into executables, and further pre-processing these executables to support _virtual_ instructions.
+
+- Performing the role of a VM i.e. emulating a CPU that is able fetch, decode and execute the above executables. This gives us program trace - snapshot of registers and memory after the execution of each instruction.
+
+- We then go from a trace, to a set of polynomials. Some of the polynomials the Jolt needs to commit to using a polynomial commitment scheme, while other polynomials are referred as to as virtual polynomials -- ones which we can evaluate from the committed polynomials, and publicly available information.
+
+- Once we have polynomials that describe the operations in the trace, we use these polynomials to come up with a set of constraints. Satisfying these constraints would indicate that we ran the program correctly.
+
+#todo[This section needs a good bit of wiritng later on.]
 
 === Compilation And Preprocessing 
 
-Although the user describes computation in a high level programming language, as described in @guest-program; the Jolt zk-VM currently only accepts as input computational descriptions written in _extended_ RISC-V assembly.
-We will shortly qualify what we mean by _extended_, but now it suffices to think of the input to Jolt as an `elf` executable that a RISC-V CPU (or RISC-V emulator) can run.
+Although the user describes computation in a high level programming language, as described in @guest-program; the Jolt zk-VM currently only accepts delegated computation described in _extended_ RISC-V assembly.
+By _extended_ RISC-V assembly, we mean the `elf` executable that a RISC-V CPU (or RISC-V emulator) can run, plus some extra instructions which we refer to as _virtual_ instructions. 
+Virtual instructions (and virtual sequences), are introduced in Section 6 of the original Jolt manuscript by #citet(<arun2024jolt>).
+Virtual instructions can be thought of as extra instructions that are not defined in the official RISC-V ISA #todo[CITE] but are specifically created to facilitate proving.
+
+In @sec:compilation, we describes the above processes in full detail. 
 Therefore, the first step is to compile the high level description to an executable. 
-Following this, we pre-process this `.elf` file to generate what we refer to the *Jolt Bytecode*.  
-The mental model for the Jolt bytecode is that it's an executable that's described using real and _virtual_ RISC-V instructions. 
+Following this, we pre-process this `.elf` file to generate what we refer to the *Jolt Bytecode* (which is the original executable + virtual instructions).  
 @fig:birds-overview summarises this first logical phase of the Jolt VM.
-In @sec:compilation we describes the above processes in full detail. 
-
-
-// Does this live change, indeed it does
-// What a life this is what we need to do.
-// #cite(<cardoso2023mcgdiff>)
-//
-// Can i cite @here_is_chap1
-//
 
 #figure(
 oxdraw("
@@ -93,20 +99,19 @@ caption: []
 
 === RISC-V Emulation 
 
-In the emulation phase, given the *Jolt Bytecode* and program inputs, the `tracer` crate inside of Jolt executes the program to compute program outputs. 
+Given the *Jolt Bytecode* and program inputs, the `tracer` crate inside of Jolt executes the program to compute program outputs. 
 Additionally it stores a log, called the `trace` of the all the state transitions during the execution  of the executable. 
-
 The `tracer` originated as a fork of the `riscv-rust`#footnote[#link("https://github.com/takahirox/riscv-rust")]<riscv-rust> repository.
+It executes the program by emulating a CPU that knows how to fetch, decode and execute _extended_ RISC-V instructions.
+In @sec:emulation, we list every virtual instruction used in Jolt, and describe the emulation process in detail, setting us up for our first formal verification task.
+#pagebreak()
 
-It executes the program by emulating a CPU that knows how to follow RISC-V instructions.
-In addition, the Jolt CPU also knows how to handle a special class of instructions described as _virtual instructions_. 
-Virtual instructions (and virtual sequences), are introduced in Section 6 of the original manuscript by #citet(<arun2024jolt>).
-Virtual instructions are extra instructions that are not defined in the official RISC-V ISA #todo[CITE] but are specifically created to facilitate proving.
-in the original paper by @arun2024jolt.  
-
-#todo[FIRST SOURCE OF REAL ERROR]
-#danger[One must formally verify that the sequence of virtual instructions actually simulate the corresponding complex instruction. ]
-In @sec:emulation, we list every virtual instruction used in Jolt, and list formal statements for correctness.
+#danger[Here we encounter our first potential source of bugs -- at least one that Jolt causes#footnote[The compiler that compiles high-level Rust code into an elf file could also have bugs, but this is considered outside the scope of Jolt. Although, Jolt would absorb such errors into its system causing the final proof system to not be complete and sound, the source of the error is not attributed to the Jolt code base.].
+We have essentially altered the compilation process. 
+The input to Jolt is not the elf file generated by well maintained `rustc` + `llvm` stack, but the augmented *Jolt bytecode*.
+One must formally verify that this alteration does not change the expected behaviour of the original program.
+Otherwise, what we  end up with is a proof that is potentially sound and complete for a program that is different from the guest program.
+]
 
 FIXME: #todo[BEGIN: FROM JOLT BOOK]
 Reasons for Using Virtual Instructions:
