@@ -50,14 +50,17 @@ This is the premise of the Jolt zk-VM.
 Our job in this document will be to formally prove that the above conditions hold i.e. the proof system is sound and complete.
 == Overview Of Jolt Components 
 
-@fig:birds-overview describes the user interface to Jolt.
+The Jolt code can be partitioned in a few separate logical components as described below. 
 
 === Compilation And Preprocessing 
 
-Although the user describes computation in a high level programming language, such as rust, the Jolt zk-VM currently only accepts descriptions written in RISC-V assembly.
-Throughout this document we refer to the users high level computation description as the guest program.
-Thus, the first step is to compile the given guest program into the appropriate `.elf` file.
-@sec:compilation describes this process in detail. 
+Although the user describes computation in a high level programming language, as described in @guest-program; the Jolt zk-VM currently only accepts as input computational descriptions written in _extended_ RISC-V assembly.
+We will shortly qualify what we mean by _extended_, but now it suffices to think of the input to Jolt as an `elf` executable that a RISC-V CPU (or RISC-V emulator) can run.
+Therefore, the first step is to compile the high level description to an executable. 
+Following this, we pre-process this `.elf` file to generate what we refer to the *Jolt Bytecode*.  
+The mental model for the Jolt bytecode is that it's an executable that's described using real and _virtual_ RISC-V instructions. 
+@fig:birds-overview summarises this first logical phase of the Jolt VM.
+In @sec:compilation we describes the above processes in full detail. 
 
 
 // Does this live change, indeed it does
@@ -90,7 +93,9 @@ caption: []
 
 === RISC-V Emulation 
 
-In the emulation phase, given the set of assembly instructions and program inputs, the `tracer` crate inside of Jolt executes the program to compute program outputs. 
+In the emulation phase, given the *Jolt Bytecode* and program inputs, the `tracer` crate inside of Jolt executes the program to compute program outputs. 
+Additionally it stores a log, called the `trace` of the all the state transitions during the execution  of the executable. 
+
 The `tracer` originated as a fork of the `riscv-rust`#footnote[#link("https://github.com/takahirox/riscv-rust")]<riscv-rust> repository.
 
 It executes the program by emulating a CPU that knows how to follow RISC-V instructions.
