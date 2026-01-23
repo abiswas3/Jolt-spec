@@ -6,6 +6,14 @@
 
 == Problem Summary<problem-summary>
 
+#figure(
+  image("../assets/Jolt-overview.svg", width: 91%),
+  caption: [
+    A high level overview of what the Jolt prover does. 
+    The verifying program wishes to compute the answer from executing some program. 
+    The prover...
+    ],
+)
 Before diving into the inner workings of Jolt, we provide a high level overview of the problem the Jolt zk-VM attempts to solve. 
 A user#footnote[We make the following distinction between the term "user" and the term "verifier". 
 Throughout, this document, when we say "user", we mean an application user that uses Jolt to delegate the computation of a computer program. 
@@ -15,14 +23,8 @@ For example, the user might want to execute the rust program described in @guest
 
 
 #todo[TODO: Change the code to the correct snippet.]
-// #figure(
-//   image("../assets/Jolt-overview.svg", width: 90%),
-//   caption: [
-//     A high level overview of what the Jolt prover does. 
-//     The verifying program wishes to compute the answer from executing some program. 
-//     The prover...
-//     ],
-// )
+
+
 #figure(
 codebox()[
   ```rust
@@ -81,14 +83,9 @@ oxdraw("
 graph LR
      prog[Rust Program]
      elf[Elf File]
-
+     byte[ Jolt Byte Code]
      prog -->|Compilation| elf
-
-prv-pre[Prover Prepocess]
-     vfr-pre[Verifier Prepocess]
-     elf -->|Jolt Prover Pre-processing| prv-pre
-     elf -->|Jolt Verifier Pre-processing| vfr-pre
-
+     elf -->|Jolt tracer| byte 
    ",
  
 background: "#f0f8ff",
