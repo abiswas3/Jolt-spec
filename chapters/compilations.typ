@@ -5,7 +5,7 @@
 // #show raw.where(block: false): set text(font: "PT Mono", fill: red)
 #pagebreak()
 = Compilation<sec:compilation>
-
+#todo[Put some instructions on clonin, and where to start. ]
 In this section we provide full details of the compilation phase of Jolt. 
 The entry point to Jolt is the command 
 
@@ -85,7 +85,11 @@ pub fn decode(elf: &[u8]) -> (Vec<Instruction>, Vec<(u64, u8)>, u64) {
 
 ```
 ]
+== The Jolt Tracer
 
+
+=== Instructions
+=== Cycles 
 // #block(width: 100%, fill: blue.transparentize(30%),   
 //     inset: 8pt,
 //     radius: 3pt,
