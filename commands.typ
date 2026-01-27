@@ -22,6 +22,14 @@
     #body
 ]
 
+#let aretefacts(body) = callout(
+  title: "Artefacts",
+  icon: "⚠️",
+  fill: rgb("#fff4e5"),
+  stroke: rgb("#f59e0b"),
+)[#body]
+
+
 #let warning(body) = callout(
   title: "Warning",
   icon: "⚠️",

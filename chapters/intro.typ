@@ -4,7 +4,6 @@
 
 = Overview<overview>
 
-== Problem Summary<problem-summary>
 //
 // #figure(
 //   image("../assets/Jolt-overview.svg", width: 91%),
