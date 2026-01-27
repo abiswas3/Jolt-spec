@@ -5,18 +5,61 @@
 // #show raw.where(block: false): set text(font: "PT Mono", fill: red)
 #pagebreak()
 = Compilation<sec:compilation>
-#todo[Put some instructions on clonin, and where to start. ]
+
+
+#figure(
+oxdraw("
+graph LR
+     prog[Rust Program]
+     elf[RISC-V elf]
+     bytecode[Jolt Bytecode]
+     prog -->|Compilation| elf
+     elf -->|Extend| bytecode
+   ",
+ 
+background: "#f0f8ff",
+),
+caption: []
+)<fig:compile-1>
+
+
 In this section we provide full details of the compilation phase of Jolt. 
+@fig:compile-1 provides an overview of the logical phases we discuss here. 
+// Although the aim is to be formal, and describe process as generally as feasible, we ground our descriptions with the running example from @guest-program.
 The entry point to Jolt is the command 
 
 ```bash
 cargo run --release -p jolt-core profile --name fibonacci
 ```
 
-which tells Jolt execute and prove the high level fibonacci found at `jolt/examples/fibonacci/guest/src/lib.rs` defined in @guest-program.
-The next step is to compile the high level program into an executable.
+which tells Jolt execute and prove program described in @guest-program found at `jolt/examples/fibonacci/guest/src/lib.rs`.
 
-The block of code responsible for this logical phase can be found in `jolt/jolt-core/src/host/program.rs` at the following funcution.
+== RISC-V-IMAC 
+
+As decribed before, Jolt only accepts inputs written Jolt assembly. 
+So the first step is to compile the program down to an elf file in the `risc-v-imac` format.
+We draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);`found in `jolt/jolt-core/src/host/program.rs`. 
+Under the hood -- Jolt does the following: 
+#codebox()[
+```bash
+env CARGO_ENCODED_RUSTFLAGS=$'-C\x1flink-arg=-T/tmp/jolt-guest-linkers/fibonacci-guest.ld\
+\x1f-C\x1fpasses=lower-atomic\
+\x1f-C\x1fpanic=abort\
+\x1f-C\x1fdebuginfo=0\
+\x1f-C\x1fstrip=symbols\
+\x1f-C\x1fopt-level=3\
+\x1f--cfg\x1fgetrandom_backend="custom"' \
+    CC_riscv64imac-unknown-none-elf='' \
+    CFLAGS_riscv64imac-unknown-none-elf='' \
+cargo build \
+    --release \
+    --features guest \
+    -p fibonacci-guest \
+    --target-dir /tmp/jolt-guest-targets/fibonacci-guest- \
+    --target riscv64imac-unknown-none-elf
+```
+]
+
 
 #codebox()[
 ```rust
@@ -34,22 +77,10 @@ pub fn decode(&mut self) -> (Vec<Instruction>, Vec<(u64, u8)>, u64) {
 ```
 ]
 
-We draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);` as this is where the bulk of the work happens.
-#figure(
-oxdraw("
-graph LR
-     prog[Rust Program]
-     elf[Elf File]
-     prog -->|Compilation| elf
-   ",
- 
-background: "#f0f8ff",
-),
-caption: []
-)<fig:compile-1>
 
-Under the hood -- Jolt does the following: 
 
+
+== Jolt Bytecode
 Now we want an extended RISC-V binary.
 
 #figure(

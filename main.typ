@@ -21,7 +21,7 @@
 //-------------------------------------------------------------
 #show: template.with(
   title: "Jolt Formal Specification",
-  authors: ("Ari", "Quang Dao", "Rose Silver", "Justin Thaler",),
+  authors: ("Ari", "Quang Dao", "Tan Li", "Rose Silver", "Justin Thaler", "Michael Zhou"),
 )
 
 // #import "code_template.typ": conf

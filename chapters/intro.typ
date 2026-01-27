@@ -5,23 +5,22 @@
 = Overview<overview>
 
 == Problem Summary<problem-summary>
-
-#figure(
-  image("../assets/Jolt-overview.svg", width: 91%),
-  caption: [
-    A high level overview of what the Jolt prover does. 
-    The verifying program wishes to compute the answer from executing some program. 
-    The prover...
-    ],
-)
-Before diving into the inner workings of Jolt, we provide a high level overview of the problem the Jolt zk-VM attempts to solve. 
-A user#footnote[We make the following distinction between the term "user" and the term "verifier". 
-Throughout, this document, when we say "user", we mean an application user that uses Jolt to delegate the computation of a computer program. 
-When we say "verifier", we mean the specific Jolt verifier algorithm, that aforementioned user will use to certify a Jolt proof.]<fn> wishes to delegate some computation to Jolt, in return for the guarantee that Jolt will perform said computation as prescribed.
-By computation, we mean some program written in a high level programming language, and by guarantee, we mean that Jolt will provide the user with checkable proof to ensure that the program was executed correctly.
-For example, the user might want to execute the rust program described in @guest-program, which computes the sum of the first $n$ Fibonacci numbers.
-
-
+//
+// #figure(
+//   image("../assets/Jolt-overview.svg", width: 91%),
+//   caption: [
+//     A high level overview of what the Jolt prover does. 
+//     The verifying program wishes to compute the answer from executing some program. 
+//     The prover...
+//     ],
+// )
+Before diving into its inner workings, we provide a high level overview of the problem the Jolt zk-VM attempts to solve. 
+A user#footnote[We make the following distinction between the terms "user" and "verifier". 
+Throughout, this document, when we say "user", we mean an application user that uses Jolt to delegate  computation.
+When we say "verifier", we mean the specific Jolt verifier algorithm, that aforementioned user will use to certify a Jolt proof.]<fn> wishes to delegate some computation to Jolt, in return for the guarantee that Jolt  performed said computation as prescribed.
+By computation, in this document we will always refer to a program written in a high level programming language (such as Rust, C++, ...), and by guarantee, we mean that Jolt will certify that the program was executed correctly.
+Throughout this document we will use the rust program described in @guest-program, which computes the sum of the first $n$ elements in Fibonacci sequence, as the working example for delegated computation.
+$n$ will be an example of program input, and the user is responsible for specifying it.
 #todo[TODO: Change the code to the correct snippet.]
 
 
@@ -43,28 +42,37 @@ codebox()[
 caption: []
 )<guest-program>
 
+A broad description of the sequence of events.
 
-The user asks Jolt for the output of the program described in @guest-program along with a proof establishing that Jolt computed the answer correctly.
-So now instead of executing the program themselves, the task of computing the first $n$ Fibonacci numbers reduces to checking if Jolt output a valid proof. 
-If the proof is deemed valid, the user could just accept Jolt's claimed answer as the correct answer.
-Alternatively, if Jolt tried to deviate from the prescribed computation in a completely arbitrary manner, the user should not accept Jolts claim.
+1. The user hands over the program described in @guest-program to the prover, and says "Run this program with $n=5$ and give me a proof that this is the correct answer".
+
+Next we show two alternate paths that the prover could take. It could be honest, or it could lie arbitrarily. 
+
+2a. The prover claims, "the answer is 5, and here is a proof $pi$ that I computed everything correctly".   
+
+2b. The prover claims, "the answer is 10, and here is a proof $pi'$ that I computed everything correctly".
+
+3a. The verifier accepts $pi$ as valid and uses 5 as the answer. 
+3b. The verifier rejects $pi'$, and declares the prover to be a cheat. 
+
 This is the premise of the Jolt zk-VM.
-Our job in this document will be to formally prove that the above conditions hold i.e. the proof system is sound and complete.
+
+Of course we have intentionally been abstract about what constitutes a "proof", and how does one validate such a proof. 
+Our job, for the remainder of this document will be to formally define these statements, and show that the above guarantees do indeed hold. 
+We begin this work by peeling back one layer of abstraction, and decomposing Jolt into a sequence of logical components.
 
 == Overview Of Jolt Components 
 
 The Jolt zk-VM can be logically partitioned into the components described in the following subsections. 
-Overall the architecture involves 
+Each component is later described in detail in a subsequent chapter. 
 
-- Compiling high level guest programs into executables, and further pre-processing these executables to support _virtual_ instructions.
+- *Compilation*: Although the user specifies computation by writing a program in rust, the Jolt prover can only interface with programs written in special Jolt assembly. This special Jolt assembly, referred to as the `Bytecode` in the code base is a small extension of the `riscv-imac` ISA. Thus, our first step is to take the rust program and compile to `Bytecode`. Here we will encounter our first formal verification problem. We want to show that by extending `riscv` ISA, we are not changing the program behaviour in any meaningful way. The is meant to just facilitate proving.
 
-- Performing the role of a VM i.e. emulating a CPU that is able fetch, decode and execute the above executables. This gives us program trace - snapshot of registers and memory after the execution of each instruction.
+- *Execution*: With the `Bytecode` at hand, the next step is to actually do the computation. Towards this, Jolt emulates a CPU capable of fetching, decoding and executing the jolt assembly program with the specified user inputs. The emulation leads to an object referred to as the `trace`, which can be viewed as a compact representation of the machine state before and after the execution of each instruction in the bytecode.
 
-- We then go from a trace, to a set of polynomials. Some of the polynomials the Jolt needs to commit to using a polynomial commitment scheme, while other polynomials are referred as to as virtual polynomials -- ones which we can evaluate from the committed polynomials, and publicly available information.
+- *Information-Theoretic Proofs*: Now with execution complete, and jolt defines a sequence of constraints as a function of the trace. Then it makes the claim that if these constraints were to be satisfied, it would imply that the program was correctly executed. Note that this will be the crux of our formal verification efforts, as there is yet no formal proof (even on paper) that these constraints are sufficient, and or necessary. Assuming these constraints hold, and we can formally verify this statement, the next step is to actually convince the user that these constraints do indeed hold. This is done by describing the constraints as a sequence of polynomial equality constraints, and invoking the sum-check algorithm. Note that the textbook description of sum-check requires a polynomial oracle, and interaction. Interaction will be removed using the Fiat-Shamir transform, and the oracle will be simulated using polynomial commitments. This brings us to cryptography. 
 
-- Once we have polynomials that describe the operations in the trace, we use these polynomials to come up with a set of constraints. Satisfying these constraints would indicate that we ran the program correctly.
-
-#todo[This section needs a good bit of wiritng later on.]
+- *Crypto Malarkey*: Assuming all the above steps went through, we need to still show that the polynomial commitment scheme used to simulate a sum-check oracle is complete and sound. 
 
 === Compilation And Preprocessing 
 
