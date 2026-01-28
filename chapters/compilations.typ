@@ -6,6 +6,10 @@
 #pagebreak()
 = Compilation<sec:compilation>
 
+In this section we provide full details of the compilation phase of Jolt. 
+@fig:compile-1 provides an overview of the logical phases we discuss here.
+At the end of this stage, we should have an executable stored in memory called the `Bytecode` which fully describes the user program in Jolt assembly.
+We will also articulate how we go from RISC-V to Jolt assembly. 
 
 #figure(
 oxdraw("
@@ -23,10 +27,9 @@ caption: []
 )<fig:compile-1>
 
 
-In this section we provide full details of the compilation phase of Jolt. 
-@fig:compile-1 provides an overview of the logical phases we discuss here. 
-// Although the aim is to be formal, and describe process as generally as feasible, we ground our descriptions with the running example from @guest-program.
-The entry point to Jolt is the command 
+== RISC-V-IMAC 
+
+The entry point for the user the following command
 
 ```bash
 cargo run --release -p jolt-core profile --name fibonacci
@@ -34,9 +37,8 @@ cargo run --release -p jolt-core profile --name fibonacci
 
 which tells Jolt execute and prove program described in @guest-program found at `jolt/examples/fibonacci/guest/src/lib.rs`.
 
-== RISC-V-IMAC 
 
-As decribed before, Jolt only accepts inputs written Jolt assembly. 
+As described before, Jolt only accepts inputs written Jolt assembly, which is constructed by extending the RISCV-IMAC architecture.
 So the first step is to compile the program down to an elf file in the `risc-v-imac` format.
 We draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);`found in `jolt/jolt-core/src/host/program.rs`. 
 Under the hood - Jolt runs the following command
@@ -101,25 +103,71 @@ The other flags -- tell the compiler that it should simply abort if it encounter
 
 == Jolt Bytecode
 
-The next step is to convert this elf file into a new executable called the `Bytecode` for Jolt-Assembly.
-The `Bytecode` will a vector of `Instruction` enums defined in #todo()[TODO enums]
-The block of code to focus on can be found in `jolt/jolt-core/src/guest/program.rs` and is described in @fig:bytecode.
-Logically this block has two phases. 
-In the first phase, we simply translate the native RISCV elf file into an appropriate memory representation. 
-In the next phase, we replace some native instructions as a sequence of simpler instructions. 
-More details follow.
+
+The next step is to convert this elf file into Jolt bytecode.
+The bytecode will a vector of `Instruction` enumerations defined in #todo()[TODO enums]
+For every instruction defined in the RISCV-IMAC isa, there is a corresponding `Instruction` enumeration.
+
+```rust
+pub enum Instruction {
+        /// No-operation instruction (address)
+        NoOp,
+        UNIMPL,
+        ADD(ADD),
+        ADDI(ADDI),
+        // so on ...
+``` 
+This is best illustrated with a concrete example. 
+From the specification, there are 6 core instruction formats in which an instruction from the core RISCV instruction set maybe specified.
+
+#figure(
+  image("../assets/r-types.png", width: 95%),
+  caption: [
+  `formatr` type instructions 
+     ],
+)
+#warning()[
+Consider the `ADD` instruction at some location in memory. 
+It is a single word (32 bits) instruction written in the `R` format.
+
+```asm
+add    a5,a5,a4
+```
+Adds the registers `rs1` (`a5` in our case) and `rs2` (`a4` in our case) and stores the result in `rd` (`a5` in our case). Arithmetic overflow is ignored and the result is simply the low XLEN bits of the result.
+
+This instruction in the Jolt specific data-structure becomes the following concrete enumeration `Instruction::ADD(ADD)` where the enclosed type `ADD` is as follows
+```rust
+pub struct ADD {
+    pub address: u64, // Address from which CPU fetches this instruction
+    pub operands: FormatR, // format in which the instruction is specified.
+    pub virtual_sequence_remaining: Option<u16>, // Explained below
+    pub is_first_in_sequence: bool, // Explained below
+    pub is_compressed: bool, // Is it a half word instruction or not
+}
+
+pub struct FormatR {
+    pub rd: u8, // Will get the value 5 from the above example
+    pub rs1: u8, // Will get the value 5
+    pub rs2: u8, // Will get the value 4
+}
+```
+
+
+
+]
+=== Virtual Instructions 
+
+Nominally, what is going on in this phase is relatively simple. 
+We go through the `.text` section of the bytecode, look up the instructions at given memory locations, and store the information in data structures written in rust as shown in the example above.
+For every RISCV instruction we store a corresponding Jolt instruction. 
+However, we mentioned that the input to the Jolt emulator is not RISCV instructions, but an extended version we call Jolt Assembly or the Jolt Bytecode.
+The following block of code is where this extension takes place.
 
 #figure(
 codebox()[
 ```rust
 pub fn decode(elf: &[u8]) -> (Vec<Instruction>, Vec<(u64, u8)>, u64) {
-
-    // Take a stream of bytes which represent the native elf file
-    // and store the information in Jolt specific data structures.
-    let (mut instructions, raw_bytes, program_end, xlen) = tracer::decode(elf);
-    let program_size = program_end - RAM_START_ADDRESS;
-    let allocator = VirtualRegisterAllocator::default();
-
+    // ...
     // Expand virtual sequences
     // Expand complex native instructions into a sequence of many
     // instructions 
@@ -127,210 +175,135 @@ pub fn decode(elf: &[u8]) -> (Vec<Instruction>, Vec<(u64, u8)>, u64) {
         .into_iter()
         .flat_map(|instr| instr.inline_sequence(&allocator, xlen))
         .collect();
-
-    (instructions, raw_bytes, program_size)
+    // ...
 }
 ```
 ],
 caption: []
 )<fig:bytecode>
  
-We will investigate the above process in great detail next. 
-This is important as the second phase where we expand instructions, we might be introducing bugs, and its important for us to formally verify that we are not. 
-Thus, a detailed explanation of the above steps is important. 
-We first
+Understanding these extensions are important, as our first formal verification task will involve verifying we apply extensions correctly.
+Before formally defining all these expansions, we once again work through a concrete example to aid our understanding.
 
- 
-=== RISC-V Instruction
-
-The first object of  study will be the enum `Instruction` which will implement the `RISCVInstruction` trait. 
-`Instruction` is simply the enumeration of all the assembly instructions we need to handle -- for us this will be anything specified by the RISC-IMAC architecture and _virtual instructions_ which we have mentioned, but have yet to define.
-The `NormalisedInstruction` type can be viewed as an `Instruction` with the formatting#footnote[Risc-v has many formats. #todo()[put link here TODO]] removed. 
-
-```rust
-
-pub trait RISCVInstruction:
-    std::fmt::Debug
-    + Sized
-    + Copy
-    + Into<Instruction>
-    + From<NormalizedInstruction>
-    + Into<NormalizedInstruction>
-{
-    const MASK: u32;
-    const MATCH: u32;
-
-    type Format: InstructionFormat;
-    type RAMAccess: Default + Into<RAMAccess> + Copy + std::fmt::Debug;
-
-    fn operands(&self) -> &Self::Format;
-    fn new(word: u32, address: u64, validate: bool, compressed: bool) -> Self;
-    #[cfg(any(feature = "test-utils", test))]
-    fn random(rng: &mut rand::rngs::StdRng) -> Self {
-        use rand::RngCore;
-        Self::new(rng.next_u32(), rng.next_u64(), false, false)
-    }
-    fn execute(&self, cpu: &mut Cpu, ram_access: &mut Self::RAMAccess);
-}
-```
-
-It is relatively simple.  Once it reads 32 bits from the elf file, it needs to decode the assembly instruction. 
-To do this it must differentiate between `R` types and `B` type instructions (see worked out example below). 
-Then it also stores whether executing the instruction requires any kind of memory access. For example, the `addi` instruction does not require memory access 
-
-```asm
-addi    a5,a5,-1
-```
-
-but the following load instruction  does. 
-
-```asm 
-lbu     a7,0(a5)
-```
-
-=== Instruction 
-
-Appendix #todo()[todo] lists all types of Instructions jolt can parse. 
-Each enumeration of the `Instruction` enum is then defined using the declarative macro:
-
-```rust
-macro_rules! declare_riscv_instr {
-    (
-      name    = $name:ident,
-      mask    = $mask:expr,
-      match   = $match_:expr,
-      format  = $format:ty,
-      ram     = $ram:ty
-  ) 
-```
-
-This macro rule will create a struct of the form 
-
-```rust
-pub struct $name {
-    pub address: u64,
-    pub operands: $format,
-    pub virtual_sequence_remaining: Option<u16>,
-    pub is_first_in_sequence: bool,
-    /// Set if instruction is C-Type
-    pub is_compressed: bool,
-}
-```
-
-As an example call the `add` instruction is defined as follows:
-
-```rust
-declare_riscv_instr!(
-    name   = ADD,
-    mask   = 0xfe00707f,
-    match  = 0x00000033,
-    format = FormatR,
-    ram    = ()
-);
-```
-so this becomes the following concrete type. 
-
-```rust
-pub struct ADD {
-    pub address: u64,
-    pub operands: FormatR,
-    pub virtual_sequence_remaining: Option<u16>,
-    pub is_first_in_sequence: bool,
-    /// Set if instruction is C-Type
-    pub is_compressed: bool,
-}
-
-pub struct FormatR {
-    pub rd: u8,
-    pub rs1: u8,
-    pub rs2: u8,
-}
-```
-
-It also implements the following implemenations 
-
-```rust
-impl crate::instruction::RISCVInstruction for ADD {
-  const MASK: u32 = 0xfe00707f;
-  const MATCH: u32 = 0x00000033;
-
-  type Format = FormatR;
-  type RAMAccess = ();
-
-  fn operands(&self) -> &Self::Format {
-    &self.operands
-  }
-
-  fn new(word: u32, address: u64, validate: bool, compressed: bool) -> Self {
-    if validate {
-      debug_assert_eq!(
-          word & Self::MASK,
-          Self::MATCH,
-          "word: {:x}, mask: {:x}, word & mask: {:x}, match: {:x}",
-          word,
-          Self::MASK,
-          word & Self::MASK,
-          Self::MATCH
-          );
-    }
-    Self {
-      address,
-        operands: <FormatR as crate::instruction::format::InstructionFormat>::parse(
-            word,
-            ),
-        virtual_sequence_remaining: None,
-        is_first_in_sequence: false,
-        is_compressed: compressed,
-    }
-  }
-
-  // Separately defined outside the macro
-  fn execute(&self, cpu: &mut crate::emulator::cpu::Cpu, ram: &mut Self::RAMAccess) {
-    self.exec(cpu, ram)
-  }
-}
-
-```
-
-
-To get a clear picture of our internal representation of an assembly instruction, we work through a complete example. 
-Consider an RISC-V instruction specified in `R` format as shown below. 
-
-The `match` field is `0x33` which if expanded to 7 bits is just `0b0110011`.
-So this tells use the opcode. 
-The mask helps us figure out `func3` and `func7` along with the opt code. 
-
-From the spec:
+Consider the `MULH` instruction described in @code:mul-h
 #figure(
-  image("../assets/r-types.png", width: 80%),
-  caption: [
-  `FormatR` type instructions 
-     ],
-)
-
-we have 
-```bash
-opcode = 0110011   (bits 6–0)
-funct3 = 000       (bits 14–12)
-funct7 = 0000000   (bits 31–25)
+codebox()[
+```asm
+mulh rd, rs1, rs2
 ```
+]
+,
+caption: [The `MULH` instruction which performs an `XLEN`-bit $ times$  `XLEN`-bit multiplication of signed `rs1` by signed `rs2` and places the upper `XLEN` bits in the destination register.
+]
+)<code:mul-h>
 
-`rd, rs1, rs2` are variables.
+In Jolt assembly we do not have a corresponding `MULH` instruction#footnote()[In the list of enumerations we do have a listing for `MULH`, but in the `fn inline_sequence` method of the implementation, we replace the single occurrence of `MULH` with a sequence of virtual instructions.]. 
+Instead, we replace every occurrence of the `MULH` instruction with the following sequence of Jolt assembly instructions. 
+We do this to make the life of the prover easier (we will get to that). 
 
-So the mask must cover:
-```md 
-funct7 (bits 31–25) → 0b1111111 << 25 = 0xFE000000
-funct3 (bits 14–12) → 0b111 << 12 = 0x00007000
-opcode (bits 6–0) → 0b1111111 = 0x0000007F
-```
-
-Add them together we get the mask above 
+#figure(
+codebox()[
 ```rust
-0xFE000000 | 0x00007000 | 0x0000007F = 0xFE00707F
+asm.emit_i::<VirtualMovsign>(*v_sx, self.operands.rs1, 0);
+asm.emit_i::<VirtualMovsign>(*v_sy, self.operands.rs2, 0);
+asm.emit_r::<MULHU>(*v_0, self.operands.rs1, self.operands.rs2);
+asm.emit_r::<MUL>(*v_sx, *v_sx, self.operands.rs2);
+asm.emit_r::<MUL>(*v_sy, *v_sy, self.operands.rs1);
+asm.emit_r::<ADD>(*v_0, *v_0, *v_sx);
+asm.emit_r::<ADD>(self.operands.rd, *v_0, *v_sy);
+```]
+,
+caption: []
+)<code:v-mulh>
+
+*The Key Thing To Show*: Note that by doing this, we have fundamentally changed the delegated program that user specified.
+Assuming we trust the `rustc` compiler, the user input to the program described the `.elf` file which only contained native `RISCV-IMAC` instructions.
+Now we have gone, and changed some of these instructions. 
+Our claim is that although we have changed the source code, we have not changed the program.
+In other words, the program state (memory, registers, flags etc) will be the exact same before and after, whether we executed the original instruction, or the block above.
+We will treat the entire block of instructions in @code:v-mulh as a single instruction.
+If the machine state is the same before and after execution, as it would be if we had executed the original instruction, we are fine.
+*This is our first formal verification task*.
+Below we show equivalence with proof written on paper, but eventually we will formalise this idea using the `Lean4` proving assistant.
+
+#theorem[
+Define machine state to be the triple of values in registers (`rd, rs1`,`rs2`).
+The machine state before and after executing instructions in @code:mul-h and @code:v-mulh is identical.
+]<thm2>
+#proof[
+
+Define variables $z, x, y$ to denote the values in `rd`, `rs1` and `rs2` respectively.
+We are told that $x$ and $y$ have width $w=$`XLEN`=64 bits, and $x, y in [-2^(w-1), 2^(w-1)-1]$.
+At the end of the `MULH` instruction, we have $z = floor( (x  y)/2^w)$ i.e the higher $w$ bits of the product.
+
+We want to show that after the sequence of virtual instructions, the value in $z$ is the exact same.
+
+Define variable $s_x := s(x)$ and $s_y:= s(y)$ where $s: [-2^(w-1), 2^(w-1)-1] -> {0,-1}$ such that 
+
+$ s(Z) := cases(
+  0 "if" Z >= 0,
+  -1 "otherwise",
+) $
+
+Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively.
+Let $x'$ and $y'$ denote the values in in `rs1` and `rs2` respectively as if they were unsigned.
+That is $x', y' in [0, 2^w -1]$.
+It is a well known fact that $x = x' - s_x  2^w$ and $y = y' - s_y  2^w$.
+Therefore, 
+
+$
+x  y = x' y' + s_x y' 2^w + s_y 2^w x' - s_x s_y 2^(2w) \
+$
+
+Dividing and applying the floor operation 
+
+$
+floor((x  y)/2^w) = floor((x'  y')/2^w) + s_x y' + s_y x' - s_x s_y 2^(w) \
+$
+ 
+Note that as registers are `w` bits in width, we are essentially doing all calculations modulo $2^w$. 
+This means that  $s_x s_y 2^(w) equiv 0 mod 2^w$.
+Thus, we can safely drop the last term.
+
+$
+floor((x  y)/2^w) = floor((x'  y')/2^w) + s_x y' + s_y x' $
+ 
+Now we re-examine the assembly code. 
+```rust
+asm.emit_i::<VirtualMovsign>(*v_sx, self.operands.rs1, 0);
+asm.emit_i::<VirtualMovsign>(*v_sy, self.operands.rs2, 0);
 ```
 
-The full expansion of the `ADD` macro is given in #todo()[TODO:]
+It moves into virtual registers $s_x=s($`rs1`$)$ and $s_y=s($`rs2`$)$.
+Then, 
 
-= Virtual Expansions
+```rust
+asm.emit_r::<MULHU>(*v_0, self.operands.rs1, self.operands.rs2);
+```
+
+Sets virtual register $v_0$ to $v_0 = floor((x'  y')/2^w)$ 
+
+```rust
+asm.emit_r::<MUL>(*v_sx, *v_sx, self.operands.rs2);
+```
+
+Set register $s_x = s_x y'$
+
+```rust
+asm.emit_r::<MUL>(*v_sy, *v_sy, self.operands.rs1);
+```
+
+Set register $s_y = s_y x'$
+
+```rust
+asm.emit_r::<ADD>(*v_0, *v_0, *v_sx);
+```
+
+Sets virtual register `v_0` to $floor((x'  y')/2^w) + s_x y'$ 
+```rust
+asm.emit_r::<ADD>(self.operands.rd, *v_0, *v_sy);
+```
+Set the value in destination register $z$ to $z=floor((x'  y')/2^w) + s_x y' + s_y x'$  which concludes the proof. 
+]
 
 #context bib_state.get()
