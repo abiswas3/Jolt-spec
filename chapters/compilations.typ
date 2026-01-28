@@ -35,12 +35,10 @@ The entry point for the user the following command
 cargo run --release -p jolt-core profile --name fibonacci
 ```
 
-which tells Jolt execute and prove program described in @guest-program found at `jolt/examples/fibonacci/guest/src/lib.rs`.
-
-
-As described before, Jolt only accepts inputs written Jolt assembly, which is constructed by extending the RISCV-IMAC architecture.
-So the first step is to compile the program down to an elf file in the `risc-v-imac` format.
-We draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);`found in `jolt/jolt-core/src/host/program.rs`. 
+which tells Jolt execute the program described in @guest-program found at `jolt/examples/fibonacci/guest/src/lib.rs` and send me a proof that Jolt correctly executed said program.
+As mentioned earlier, Jolt only accepts inputs written Jolt assembly, which is constructed by extending the instruction set with inlines and virtual instructions.
+Before we get to virtual instructions, the first step is to compile the program down to an elf file with `risc-v-imac` instructions.
+To do this, we draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);`found in `jolt/jolt-core/src/host/program.rs`. 
 Under the hood - Jolt runs the following command
 
 #codebox()[
@@ -63,18 +61,7 @@ cargo build \
 ```
 ]
 
-where 
-
-```bash
-cargo build \
-    --release \
-    --features guest \
-    -p fibonacci-guest \
-    --target-dir /tmp/jolt-guest-targets/fibonacci-guest- \
-    --target riscv64imac-unknown-none-elf
-```
-
-Simply says build the program in package `fibonacci-guest` in the current workspace with the `guest` feature turned on. 
+The `cargo build...` part says build the program in package `fibonacci-guest` in the current workspace with the `guest` feature turned on. 
 Rust (via LLVM) uses the standard target triple format:
 ```md
 <arch>-<vendor>-<sys>-<abi>
@@ -85,12 +72,8 @@ Rust (via LLVM) uses the standard target triple format:
 + Operating System: All our guest programs are run with `#![no_std]`, so when we say `none` here, we mean the assembly should run on bare-metal or embedded systems.
 + Output format: we choose the `elf` format to output the file and we ask the compiler to put the executable in the following directory `/tmp/jolt-guest-targets/fibonacci-guest-` 
 
-The output of this command is "An ELF executable for RISC-V RV64IMAC:
-
-
-
+The output of this command is "An ELF executable for RISC-V RV64IMAC: 
 Details here: #link("https://docs.rs/target-lexicon/latest/target_lexicon/struct.Triple.html")
-
 We also tell the `rustc` compiler to use our linker script located at `/tmp/jolt-guest-linkers/fibonacci-guest.ld`, which allows to define the memory layout of our assembly code.
 The other flags -- tell the compiler that it should simply abort if it encounters a panic, instead of recursively trying to find the source of the error, we do not want debug information or symbols in the final binary, and to perform all optimisations as needed.
 
@@ -107,7 +90,7 @@ The other flags -- tell the compiler that it should simply abort if it encounter
 The next step is to convert this elf file into Jolt bytecode.
 The bytecode will a vector of `Instruction` enumerations defined in #todo()[TODO enums]
 For every instruction defined in the RISCV-IMAC isa, there is a corresponding `Instruction` enumeration.
-
+For example shown below is a partial enumeration for instructions `ADD, ADDI`
 ```rust
 pub enum Instruction {
         /// No-operation instruction (address)
@@ -117,15 +100,18 @@ pub enum Instruction {
         ADDI(ADDI),
         // so on ...
 ``` 
+
+`Instruction` is the Jolt data structure that represents a RISCV (and virtual) instruction.
 This is best illustrated with a concrete example. 
-From the specification, there are 6 core instruction formats in which an instruction from the core RISCV instruction set maybe specified.
+From the specification, there are 6 core instruction formats in which an instruction from the core RISCV instruction set maybe specified, as shown in @fig:spec,
 
 #figure(
   image("../assets/r-types.png", width: 95%),
   caption: [
   `formatr` type instructions 
      ],
-)
+)<fig:spec>
+
 #warning()[
 Consider the `ADD` instruction at some location in memory. 
 It is a single word (32 bits) instruction written in the `R` format.
@@ -151,10 +137,10 @@ pub struct FormatR {
     pub rs2: u8, // Will get the value 4
 }
 ```
-
-
-
 ]
+
+#todo()[picture]
+
 === Virtual Instructions 
 
 Nominally, what is going on in this phase is relatively simple. 
@@ -233,10 +219,11 @@ The machine state before and after executing instructions in @code:mul-h and @co
 #proof[
 
 Define variables $z, x, y$ to denote the values in `rd`, `rs1` and `rs2` respectively.
-We are told that $x$ and $y$ have width $w=$`XLEN`=64 bits, and $x, y in [-2^(w-1), 2^(w-1)-1]$.
+We are told that $x$ and $y$ have width $w=$`XLEN`=64 bits i.e. $x, y in [-2^(w-1), 2^(w-1)-1]$.
 At the end of the `MULH` instruction, we have $z = floor( (x  y)/2^w)$ i.e the higher $w$ bits of the product.
 
 We want to show that after the sequence of virtual instructions, the value in $z$ is the exact same.
+We never update $x$ and $y$ so the source registers remain unchanged in both executions.
 
 Define variable $s_x := s(x)$ and $s_y:= s(y)$ where $s: [-2^(w-1), 2^(w-1)-1] -> {0,-1}$ such that 
 
@@ -246,7 +233,7 @@ $ s(Z) := cases(
 ) $
 
 Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively.
-Let $x'$ and $y'$ denote the values in in `rs1` and `rs2` respectively as if they were unsigned.
+Let $x'$ and $y'$ denote the values in in `rs1` and `rs2` respectively but interpreted as unsigned integers.
 That is $x', y' in [0, 2^w -1]$.
 It is a well known fact that $x = x' - s_x  2^w$ and $y = y' - s_y  2^w$.
 Therefore, 
@@ -306,4 +293,12 @@ asm.emit_r::<ADD>(self.operands.rd, *v_0, *v_sy);
 Set the value in destination register $z$ to $z=floor((x'  y')/2^w) + s_x y' + s_y x'$  which concludes the proof. 
 ]
 
+= Remaining 
+
+```bash
+> cd tracer/src/instruction/
+> rg "fn\s+inline_sequence" --files-with-matches --glob "*.rs" | wc -l
+56
+```
+So there are 55 more instructions need to be virtualised. 
 #context bib_state.get()
