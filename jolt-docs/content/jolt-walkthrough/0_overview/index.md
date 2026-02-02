@@ -86,7 +86,7 @@ The back end proves that these polynomial equations are indeed satisfied.
 ### Front End 
 
 The following mermaid sequence diagram gives an overview of the important front-end components. 
-The [Compilation](@/jolt-walkthrough/1_compilation.md) chapter will cover how we go from the Rust program described above to a binary written in Jolt assembly (an extended version of [RISCV](https://riscv.org/specifications/ratified/)).
+The [Compilation](@/jolt-walkthrough/1_compilation/index.md) chapter will cover how we go from the Rust program described above to a binary written in Jolt assembly (an extended version of [RISCV](https://riscv.org/specifications/ratified/)).
 At the end of this step, we get an assembly program in the Jolt-ISA that the Jolt CPU can actually execute. 
 One can find a complete specification of the [Jolt ISA here](@/references/jolt-isa.md).
 
@@ -109,7 +109,7 @@ sequenceDiagram
 {% end %}
 
 The Jolt CPU emulates a VM (this is where the VM in the zk-VM nomenclature comes from) - fetches, decodes and executes instructions.
-The execution process is detailed in the chapter on [Emulation](@/jolt-walkthrough/2_emulation.md).
+The execution process is detailed in the chapter on [Emulation](@/jolt-walkthrough/2_emulation/index.md).
 At the end of execution, we obtain a trace. 
 A trace is just a fancy word for bookkeeping.
 It is a record of the program state (the registers, memory, program counter, flags etc) before and after each instruction.
@@ -157,6 +157,22 @@ We must show that if we these constraints were satisfied, then we can rest safe 
 
 ### The Back End 
 
+
+> Currently THIS IS STILL IN PROGRESS
+
+{% mermaid() %}
+%%{init:{'themeCSS':'g:nth-of-type(8) rect.actor { stroke:blue;fill: pink; }; g:nth-of-type(4) rect.actor { stroke:blue;fill: pink; };'}}%%
+sequenceDiagram
+    participant Backend as Jolt Front End 
+    participant s1 as Stage 1 Sumcheck
+    participant s2 as Stage 2 Sumcheck
+    participant s3 as Stage 3 Sumcheck
+    Backend->>s1: User input + Trace
+    s1->>s2: Sumcheck 1 output
+    s2->>s3: Sumcheck 2 output ...
+{% end %}
+
+
 From the trace, we get a system of polynomial equations. 
 The full list can be found in [constraints](@/references/constraints.md) section of the references chapter. 
 The main question here is how does one prove these constraints are satisfied, without actually solving the left- and right-hand sides of the equations themselves.
@@ -165,7 +181,7 @@ We will first describe these sum-checks in an idealised setting, and then finall
 We leave the overview of the back-end short, as without seeing the details we feel it is only more confusing.
 
 
-We are now ready for our first deep dive - [compilation](@/jolt-walkthrough/1_compilation.md).
+We are now ready for our first deep dive - [compilation](@/jolt-walkthrough/1_compilation/index.md).
 
 ## Footnotes
 

@@ -13,8 +13,8 @@ generate_feeds = false
 
 [markdown.highlighting]
 style = "class"
-light_theme = "light-plus"
-dark_theme = "catppuccin-macchiato"
+dark_theme = "gruvbox-dark-hard"
+light_theme = "one-light"
 
 [extra]
 mode = "docs"
