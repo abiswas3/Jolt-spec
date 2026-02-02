@@ -12,9 +12,9 @@ generate_feeds = false
 # highlight_theme = "css"
 
 [markdown.highlighting]
-style = "inline"
-light_theme = "github-light"
-dark_theme = "github-light"
+style = "class"
+light_theme = "light-plus"
+dark_theme = "catppuccin-macchiato"
 
 [extra]
 mode = "docs"
