@@ -8,9 +8,13 @@ build_search_index = true
 generate_feeds = false
 
 [markdown]
-highlight_code = true
-highlight_theme = "css"
-# insert_anchor_links = "left"
+# highlight_code = h
+# highlight_theme = "css"
+
+[markdown.highlighting]
+style = "inline"
+light_theme = "github-light"
+dark_theme = "github-light"
 
 [extra]
 mode = "docs"
