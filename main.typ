@@ -3,13 +3,6 @@
 #import "template.typ": *
 #import "commands.typ": * 
 
-#show: equate.with(breakable: true, sub-numbering: true)
-#show raw: set text(font: "Chalkboard SE")
-#show raw.where(block: false): set text(font: "Chalkboard SE", fill: green)
-// Theorems 
-#show: great-theorems-init
-#show: thmrules.with(qed-symbol: $square$)
-
 #show bibliography: it => {
   show link: set text(blue)
   show link: underline

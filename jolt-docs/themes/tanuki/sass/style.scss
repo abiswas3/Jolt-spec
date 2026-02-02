@@ -1,0 +1,186 @@
+// =============================================================================
+// Tanuki Theme - Main Stylesheet (タヌキ)
+// A flexible Zola theme with Catppuccin colors and design system patterns
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Design Tokens
+// Foundation: colors, spacing, typography
+// -----------------------------------------------------------------------------
+@use "tokens/colors";
+@use "tokens/spacing";
+@use "tokens/typography";
+
+// -----------------------------------------------------------------------------
+// Base Styles
+// Reset, fonts, and base element styling
+// -----------------------------------------------------------------------------
+@import "base/fonts";
+@import "base/reset";
+@import "base/typography";
+// Note: base/catppuccin is now replaced by tokens/colors
+
+// -----------------------------------------------------------------------------
+// Components
+// Shared UI components used across all modes
+// -----------------------------------------------------------------------------
+@import "components/layout";
+@import "components/navigation";
+@import "components/sidebar";
+@import "components/theme-toggle";
+@import "components/buttons";
+@import "components/code";
+@import "components/search";
+@import "components/landing";
+@import "components/print";
+
+// -----------------------------------------------------------------------------
+// Mode-Specific Styles
+// Each mode uses patterns to build its unique appearance
+// -----------------------------------------------------------------------------
+@import "modes/blog";
+@import "modes/product";
+@import "modes/raskell";
+// @import "modes/docs";  // TODO: Refactor to use patterns
+// @import "modes/book";  // TODO: Refactor to use patterns
+// @import "modes/wiki";  // Future mode
+// -----------------------------------------------------------------------------
+// Mermaid Diagram Styling
+// Override inline styles to match theme colors
+// -----------------------------------------------------------------------------
+
+/* Override Mermaid's inline styles for arrows and lines */
+// .mermaid svg .edgePath .path {
+//   stroke: var(--color-text-secondary) !important;
+//   stroke-width: 2px !important;
+// }
+//
+// .mermaid svg .arrowheadPath {
+//   fill: map-get(colors.$ctp-mocha, "red") !important;
+//   // stroke: map-get(colors.$ctp-mocha, "red") !important;
+//   stroke: var(--color-text-secondary) !important;
+// }
+//
+// .mermaid svg .marker {
+//   fill: var(--color-text-secondary) !important;
+//   stroke: var(--color-text-secondary) !important;
+// }
+//
+// .mermaid svg .flowchart-link {
+//   // stroke: var(--color-text-secondary) !important;
+//   stroke: map-get(colors.$ctp-mocha, "red") !important;
+// }
+//
+// /* Node styling */
+// .mermaid svg .node rect,
+// .mermaid svg .node circle,
+// .mermaid svg .node polygon {
+//   fill: var(--color-bg-elevated) !important;
+//   stroke: var(--ctp-blue) !important;
+// }
+//
+// .mermaid svg .messageText {
+//   fill: var(--color--text) !important;
+// }
+//
+// .mermaid svg .nodeLabel {
+//   color: var(--color-text) !important;
+//   fill: var(--color-text) !important;
+// }
+
+// .mermaid svg text[class*="loopText"] {
+//   fill: map-get(colors.$ctp-mocha, "red") !important;
+// }
+//
+// .mermaid svg .loopText {
+//   fill: map-get(colors.$ctp-mocha, "red") !important;
+// }
+
+.mermaid svg .edgeLabel {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+}
+
+.mermaid svg .edgeLabel rect {
+  fill: var(--color-bg-elevated) !important;
+  opacity: 0.9 !important;
+}
+
+/* Footnotes section */
+.footnotes {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.footnotes h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+/* Individual footnote */
+.footnote-definition {
+  display: grid;
+  grid-template-columns: 2em 1fr;
+  gap: 0.5em;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  transition: background-color 0.3s ease;
+}
+
+.footnote-definition-label {
+  text-align: right;
+  color: #666;
+  font-weight: 500;
+}
+
+.footnote-definition p {
+  margin: 0;
+  color: var(--color-text);
+}
+
+/* Footnote highlighting */
+.footnote-highlight {
+  background-color: #fff3cd !important;
+  border-radius: 4px;
+  padding: 0.5em;
+  margin-left: -0.5em;
+  margin-right: -0.5em;
+}
+
+/* Footnote reference in main text */
+sup.footnote-reference {
+  transition: background-color 0.3s ease;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+sup.footnote-reference a {
+  text-decoration: none;
+  color: var(--color-link);
+  font-weight: 500;
+}
+
+sup.footnote-reference a:hover {
+  text-decoration: underline;
+}
+
+/* Superscript highlighting */
+.sup-highlight {
+  background-color: var(--) !important;
+}
+
+/* Back reference arrow */
+.footnote-backref {
+  text-decoration: none;
+  color: var(--color-accent);
+  margin-left: 0.3em;
+  font-size: 0.9em;
+}
+
+.footnote-backref:hover {
+  text-decoration: underline;
+}

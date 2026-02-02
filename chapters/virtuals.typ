@@ -15,6 +15,244 @@
 #section-outline()
 RISC-V descriptions are taken from #link("https://msyksphinz-self.github.io/riscv-isadoc/")
 
+== MULH 
+
+Done above 
+
+== DIV (Special)
+
+Prover: computes $q$ and $r$ (fills advice fields)
+Prover: constructs aproof that these values satisfy all constraints
+Verifier: checks the proof
+
+```asm
+div rd,rs1,rs2
+```
+*Description*
+perform an XLEN bits by XLEN bits signed integer division of rs1 by rs2, rounding towards zero.
+```rust
+x[rd] = x[rs1] /s x[rs2]
+```
+
+=== Virutal Instructions
+
+```rust
+let a0 = self.operands.rs1; // dividend
+let a1 = self.operands.rs2; // divisor
+let a2 = allocator.allocate(); // quotient (from oracle)
+let a3 = allocator.allocate(); // |remainder| (from oracle)
+let t0 = allocator.allocate(); // adjusted divisor
+let t1 = allocator.allocate(); // temporary
+let shmat = 63
+
+asm.emit_j::<VirtualAdvice>(*a2, 0); // quotient
+asm.emit_j::<VirtualAdvice>(*a3, 0); // |remainder|
+
+// Handle special cases: div-by-zero and overflow
+// If divisor 0, check q = u64::MAX, otherwise do nothing
+// rs1 = a1 = divisor
+// rs2 = a2 = quotient
+asm.emit_b::<VirtualAssertValidDiv0>(a1, *a2, 0);
+// t0 = either is divisor (a1) at or 1 (based on overflow)
+asm.emit_r::<VirtualChangeDivisor>(*t0, a0, a1); 
+
+// Verify no overflow: quotient × divisor must not overflow
+// t1 = High64[q * t0]
+asm.emit_r::<MULH>(*t1, *a2, *t0); // High bits of multiplication
+
+let t2 = allocator.allocate();
+let t3 = allocator.allocate();
+
+// Take lower 64 bits of q*t0 into t2 (always fits in 64 bits)
+asm.emit_r::<MUL>(*t2, *a2, *t0); // quotient × adjusted_divisor
+// shmat is 63 - so lower 5 bits are all 1
+// t3 = sign(t2) = t2>>63
+asm.emit_i::<SRAI>(*t3, *t2, shmat); // Sign-extend low bits
+// Check that t1 = t3 or High[q*t0] = t2 >> 63 ??
+asm.emit_b::<VirtualAssertEQ>(*t1, *t3, 0); // Assert no overflow
+
+// Apply sign of dividend to remainder
+asm.emit_i::<SRAI>(*t1, a0, shmat); // Sign bit of dividend
+asm.emit_r::<XOR>(*t3, *a3, *t1); // XOR with |remainder|
+asm.emit_r::<SUB>(*t3, *t3, *t1); // Two's complement if negative
+
+// Verify: dividend = quotient × divisor + remainder
+asm.emit_r::<ADD>(*t2, *t2, *t3); // Add signed remainder
+asm.emit_b::<VirtualAssertEQ>(*t2, a0, 0); // Assert equals dividend
+
+// Verify: |remainder| < |divisor|
+asm.emit_i::<SRAI>(*t1, *t0, shmat); // Sign bit of adjusted divisor
+asm.emit_r::<XOR>(*t3, *t0, *t1); // XOR to get magnitude
+asm.emit_r::<SUB>(*t3, *t3, *t1); // |adjusted_divisor|
+// checks if (divisor) `t3= 0` or (remainder) `a3 < t3`
+asm.emit_b::<VirtualAssertValidUnsignedRemainder>(*a3, *t3, 0);
+
+// Move quotient to destination register
+asm.emit_i::<ADDI>(self.operands.rd, *a2, 0);
+```
+
+#block(
+  fill: red.transparentize(10%),
+  inset: 10pt,
+  radius: 4pt,
+  [
+    *Claim:* 
+  ]
+)
+#lemma[
+The assertion $"High64"[q dot t_0] = ("Low64"[q dot t_0] >> 63)$ passes if and only if $q dot t_0 in [-2^63, 2^63-1]$.
+]
+#proof[
+$==>$: 
+
+Suppose $q dot t_0 in [-2^63, 2^63-1]$. When viewed as a 128-bit value, this equals the sign extension of its 64-bit representation.
+
+By definition of sign extension:
+$ "High64" = cases(
+  mono("0x0000_0000_0000_0000") & "if" q dot t_0 >= 0,
+  mono("0xFFFF_FFFF_FFFF_FFFF") & "if" q dot t_0 < 0
+) $
+
+The arithmetic right shift by 63 positions produces:
+$ "Low64" >> 63 = cases(
+  0 & "if sign bit of Low64 is 0",
+  -1 = mono("0xFFFF_FFFF_FFFF_FFFF") & "if sign bit of Low64 is 1"
+) $
+
+Since the sign bit of $"Low64"$ correctly represents whether $q dot t_0 >= 0$ or $q dot t_0 < 0$, we have:
+$ "High64" = "Low64" >> 63 $
+
+Therefore the assertion passes. #h(1em) 
+
+$<==$ If the assertion passes, then $q dot t_0 in [-2^63, 2^63-1]$
+
+Suppose the assertion $"High64" = "Low64" >> 63$ passes.
+
+*Case 1:* $"Low64" >= 0$ (when interpreted as signed 64-bit, i.e., sign bit = 0)
+- Then $"Low64" >> 63 = 0$
+- So $"High64" = 0 = mono("0x0000_0000_0000_0000")$
+- The 128-bit value is: $mono("0x0000_0000_0000_0000") || "Low64"$
+- This represents a value in $[0, 2^63 - 1]$ #h(1em) ✓
+
+*Case 2:* $"Low64" < 0$ (when interpreted as signed 64-bit, i.e., sign bit = 1)
+- Then $"Low64" >> 63 = -1 = mono("0xFFFF_FFFF_FFFF_FFFF")$
+- So $"High64" = mono("0xFFFF_FFFF_FFFF_FFFF")$
+- The 128-bit value is: $mono("0xFFFF_FFFF_FFFF_FFFF") || "Low64"$
+- This represents $"Low64"$ sign-extended to 128 bits
+- Since $"Low64" in [-2^63, -1]$ as a signed 64-bit value, the 128-bit representation is also in $[-2^63, -1]$ #h(1em) ✓
+]
+
+#lemma[
+$t_3 = "sign"(a)|r|$
+]
+#proof[
+*Step 1:* Extract sign of dividend
+$ t_1 = a_0 >> 63 = cases(
+  0 = mono("0x0000_0000_0000_0000") & "if" a >= 0,
+  -1 = mono("0xFFFF_FFFF_FFFF_FFFF") & "if" a < 0
+) $
+
+*Step 2:* XOR with absolute remainder
+$ t_3 = a_3 xor t_1 $
+
+*Step 3:* Subtract to apply two's complement
+$ t_3 = t_3 - t_1 $
+*Case 1*: $a = a_0 >= 0$ (so $r=a_3$ should be non-negative)
+
+- $t_1 = 0$
+- $t_3 = a_3 xor 0 = a_3$
+- $t_3 = a_3 - 0 = a_3$
+- Result: $t_3 = |r| = r $ #h(1em) 
+
+*Case 2*: $a < 0$ (so $r=a_3$ should be $<=0$)
+
+- $t_1 = -1 = mono("0xFFFF_FFFF_FFFF_FFFF")$
+- $t_3 = a_3 xor mono("0xFFFF_FFFF_FFFF_FFFF") = tilde(a)_3$ (bitwise NOT)
+- $t_3 = tilde(a)_3 - (-1) = tilde(a)_3 + 1$
+- By two's complement: $tilde(a_3) + 1 = -a_3 = -|r| $
+- Result: $t_3 = -|r| $  #h(1em)
+]
+
+
+=== The Code (last two conditons are quite easy)
+
+
+```rust
+// Verify: dividend = quotient × divisor + remainder
+asm.emit_r::<ADD>(*t2, *t2, *t3);     // t2 = q·b + r
+asm.emit_b::<VirtualAssertEQ>(*t2, a0, 0); // Assert equals dividend
+```
+
+=== What This Checks
+
+At this point in the code:
+- `t2` = $q dot t_0$ where $t_0$ is the adjusted divisor
+- `t3` = $r$ with correct sign
+- `a0` = $a$ (dividend)
+
+The assertion verifies: $a = q dot b + r$
+
+=== Proof of Correctness
+
+*Normal case:* $t_0 = b$ (no overflow)
+- The code computes: $t_2 + t_3 = q dot b + r$
+- The assertion checks: $q dot b + r = a$
+- This is exactly the division algorithm requirement #h(1em) ✓
+
+*Overflow case:* $(a, b) = (-2^63, -1)$, and $r=0$ from the next condition that $|r| < |b'|$ (Adjusted)
+- To avoid computing $q dot b = (-2^63) dot (-1) = 2^63$ (overflow)
+- The code sets $t_0 = 1$ (adjusted divisor)
+- Then the check becomes $q + r = (-2^63) dot 1 = -2^63$ 
+- If the prover was honest $r = 0$ and $q = -2^63$ is the correct answer, and passes.
+ The assertion verifies: $q dot t_0 + r = -2^63 + 0 = a$ #h(1em) ✓
+
+#theorem[
+State matches.
+]
+#proof[
+All we need to show is that the final value in `rd` which we denote with $z$ is actually $x/y$ signed integer division with rounding towards 0.
+We start with first two instructions which simply stores in virtual registers `a2` and `a3` claimed quotient $q$, and remainder $r$.
+
+Next, we focus on the last instruction which simply returns $q$ as the answer.
+The thing to show here, if the prover uses a bad value for $q$ and $r$, one that is not what the real RISC-V cpu would have computed, we would have a panic, and thus the program would crash.
+]
+
+#warning()[
+Note for ARI:
+
+The guest program says div; and then i expand that to above.
+Now notice that the program starts with two instrucions.
+
+```rust
+asm.emit_j::<VirtualAdvice>(*a2, 0); // quotient
+asm.emit_j::<VirtualAdvice>(*a3, 0); // |remainder|
+```
+These two instructions are telling the CPU, write into virtual registers `a2` and `a3`
+the quotient and remainder. 
+Now where does the CPU, get these answers from? Well it gets it from somewhere, as $q$ and $r$  which it then proceeds to put into these registers. 
+The code below shows what the CPU actually does during tracing.
+```rust
+let mut inline_sequence = self.inline_sequence(&cpu.vr_allocator, cpu.xlen);
+// The first instructioon 
+if let Instruction::VirtualAdvice(instr) = &mut inline_sequence[0] {
+  instr.advice = quotient;
+} else {
+  panic!("Expected Advice instruction");
+}
+// The Second instruction
+if let Instruction::VirtualAdvice(instr) = &mut inline_sequence[1] {
+  instr.advice = remainder;
+} else {
+  panic!("Expected Advice instruction");
+}
+
+// With these values in there it just executes as normal.
+let mut trace = trace;
+for instr in inline_sequence {
+  instr.trace(cpu, trace.as_deref_mut());
+}
+```
+]
 == SUBW
 
 ```asm
@@ -96,7 +334,12 @@ Therefore, the final value in `rd` is correct.
 ]
 
 == SRLI 
-Performs logical right shift on the value in register rs1 by the shift amount held in the lower 5 bits of the immediate In RV64, bit-25 is used to shamt[5].
+
+```asm
+rd, rs1, immm
+```
+*Description*: Performs logical right shift on the value in register rs1 by the shift amount held in the lower 5 bits of the immediate In RV64, bit-25 is used to shamt[5].
+
 === Virtual Sequence 
 
 ```rust
@@ -330,4 +573,103 @@ $
 
 Now $b$ has $s+32$ trailing 0's so when we right shift $v_1$ by $s+32$ bits, the 32 first ensures that 
 $v_1 := 0 || x[0:31]$, so it's $x$ as `u32`, and then it right shifts by $s$ bits as desired.
+]
+ ==  SRL
+
+ ```asm
+srl rd, rs1, rs2
+ ```
+
+ *Description*: Logical right shift the contents of `rs1` by `shamt`, where `shamt` lower 6 bits of `rs2` as a unsigned integer.
+
+ === Virtual Sequence
+
+ ```rust
+ asm.emit_i::<VirtualShiftRightBitmask>(*v_bitmask, self.operands.rs2, 0);
+ asm.emit_vshift_r::<VirtualSRL>(self.operands.rd, self.operands.rs1, *v_bitmask);
+ ```
+
+#theorem[Match]
+#proof[
+1. Let $s$ denote the lower 6 bits of `rs2`. The first instruction sets `v_bitmask` to $w$ bit number with $s$ trailing 0's, from the guarantees of `VirtualShiftRightBitmask`. 
+2. The second instruction logically right shifts the contents of `rs1` by $s$ (the number of trailing 0's in `v_bitmask`).
+]
+== SW 
+
+Store at memory location in `rs1` the lower 32 bits of the contents of `rs2`.
+
+
+```rust
+
+asm.emit_halign::<VirtualAssertWordAlignment>(self.operands.rs1, self.operands.imm);
+asm.emit_i::<ADDI>(*v_address, self.operands.rs1, self.operands.imm as u64);
+asm.emit_i::<ANDI>(*v_dword_address, *v_address, -8i64 as u64);
+asm.emit_ld::<LD>(*v_dword, *v_dword_address, 0);
+asm.emit_i::<SLLI>(*v_shift, *v_address, 3);
+asm.emit_i::<ORI>(*v_mask, 0, -1i64 as u64);
+asm.emit_i::<SRLI>(*v_mask, *v_mask, 32);
+asm.emit_r::<SLL>(*v_mask, *v_mask, *v_shift);
+asm.emit_r::<SLL>(*v_word, self.operands.rs2, *v_shift);
+asm.emit_r::<XOR>(*v_word, *v_dword, *v_word);
+asm.emit_r::<AND>(*v_word, *v_word, *v_mask);
+asm.emit_r::<XOR>(*v_dword, *v_dword, *v_word);
+asm.emit_s::<SD>(*v_dword_address, *v_dword, 0);
+```
+
+#theorem[Match]
+
+#proof[
+
+  We first check if `v_address` is word aligned or not. If not we panic immediately, as the original specification would.
+  If it were to be aligned we have two cases: 
+  1. `v_address` is also double word aligned i.e divisible by 8.
+  2. `v_address` is only single world aligned but not double word aligned i.e. not divisible by 8.
+
+`asm.emit_i::<ANDI>(*v_dword_address, *v_address, -8i64 as u64);`
+`v_dword_address` is by definition double word aligned as we AND it with a mask with 3 trailing 0s.
+
+`asm.emit_ld::<LD>(*v_dword, *v_dword_address, 0);`
+`v_dword` stores 64 bits starting at address `v_dword_address`
+
+```rust
+asm.emit_i::<SLLI>(*v_shift, *v_address, 3);
+```
+Based on whether we are in case 1 or case 2, `v_shift=0` or `v_shift=32` 
+
+```rust
+asm.emit_i::<ORI>(*v_mask, 0, -1i64 as u64);
+```
+This sets `v_mask` to the all ones bits string. 
+
+`asm.emit_i::<SRLI>(*v_mask, *v_mask, 32);`
+This clears the upper 32 bits of the `mask`.
+
+`asm.emit_r::<SLL>(*v_mask, *v_mask, *v_shift);`
+Now if we are in case 1, `v_mask= 0 || 1` were upper 32 bits are 0, and lower 32 bits are 1. 
+If we are in case 2, `v_mask 1 || 0` were upper 32 bits are 1, and lower 32 bits are 0. 
+ 
+`asm.emit_r::<SLL>(*v_word, self.operands.rs2, *v_shift);`
+If we are in case 1, then `v_word = x[rs2]`
+If we are in case 2, then `v_word = x[rs2][0:31] || 0`, i.e the lower 32 bits of `rs2` are the upper 32 bits of `v_word`.
+
+Let `mem` = `v_dword`.
+
+`asm.emit_r::<XOR>(*v_word, *v_dword, *v_word);` 
+In case 1, `v_word = x[rs2] XOR mem`
+In case 2, `v_word = mem[63:32] || (mem[0:31] XOR x[rs2][0:31])`
+
+`asm.emit_r::<AND>(*v_word, *v_word, *v_mask);`
+If case 1, where `v_word` was the entire contents of `rs2`, and `v_mask= 0 ||1`, this will set `v_word` to just `0 || x[rs2][0:31] XOR mem[0:31]`. 
+
+If case 2, where `v_Word = x[rs2][0:31] XOR mem[63:32] || 0`, and `v_mask = 1 || 0`, this will keep `v_word` as is.
+
+`asm.emit_r::<XOR>(*v_dword, *v_dword, *v_word);`
+
+Now in case 1, `v_dword = mem[63:32] || x[rs2][31:0] XOR mem[0:31] XOR mem[31:0] = mem[63:32] || x[rs2][31:0]`, exactly what I want. 
+By similar, analysis, 
+In case 2, `v_dword = x[rs2][31:0] || mem[31:0]`.
+
+Store it in the right location, and that completes the proof.
+`asm.emit_s::<SD>(*v_dword_address, *v_dword, 0);`
+
 ]
