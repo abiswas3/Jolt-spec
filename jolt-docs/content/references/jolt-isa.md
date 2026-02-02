@@ -4467,7 +4467,25 @@ fn inline_sequence(
 ```
 
 ## mul.rs
-> **MUL (Multiply):** Multiplies rs1 by rs2 and stores the lower XLEN bits of the product in rd.
+> **MUL (Multiply):** Multiplies `rs1` by `rs2` and stores the lower `XLEN` bits of the product in `rd`.
+> Alternatively, 
+> ```
+> x[rd] = (x[rs1] * x[rs1]) mod 2^XLEN
+> x[rd] = x[rd] >= 2^(XLEN-1) ? x[rd] - 2^XLEN: x[rd]
+> ```
+
+**EXAMPLES**: 
+
+```
+XLEN = 4
+-4 * -3 = 12 (mathematically)
+-4 in 4-bit binary: 1100
+-3 in 4-bit binary: 1101
+Full multiplication (treating as unsigned bit patterns): 1100 * 1101 = 0011_1100 (8 bits)
+Drop the top 4 bits: keep only 1100
+1100 interpreted as 4-bit signed: -4
+Result: -4 
+```
 
 ```rust
 declare_riscv_instr!(

@@ -6,6 +6,11 @@ weight = 2
 In this section, we provide full details of the compilation phase of Jolt. 
 At the end of this stage, we should have a data structure in memory called the `bytecode` which fully describes the user program in Jolt assembly.
 
+**NOTE**: This section of the Jolt code base is public knowledge. 
+The user can inspect the binary that runs the compilation phase. 
+In fact they can run this this phase themselves.
+Later we will discuss parts of Jolt, the user does not get to see.
+
 ## RISC-V-IMAC 
 
 The entry point for the user the following command
@@ -64,7 +69,12 @@ The bytecode will a vector of `Instruction` enumerations defined [here](TODO:).
 The actual code enumerating every Jolt instruction is written using declarative macros. 
 So after a bit of `cargo expand` machinery, it looks like the `enum` showing in [Appendix-A](#appendix-a).
 
+```asm
+add    a5,a5,a4
+```
+
 The internal memory representation of the `ADD` enumeration of the `Instruction::ADD(ADD)` enum looks like the following:
+
 ```rust
 pub struct ADD {
     pub address: u64, // Address from which CPU fetches this instruction
@@ -116,11 +126,18 @@ pub fn decode(elf: &[u8]) -> (Vec<Instruction>, Vec<(u64, u8)>, u64) {
 ```
 This is best illustrated with a fully worked out example.
 
-### A Worked Out Example
+### A Worked Out Example Of Virtual Expansion
+
+Consider the following RISC-V M extension instruction. 
+
+From the ISA specifications, this instruction computes the upper half of the signed product of `rs1` and `rs2`, storing the high bits in `rd`. 
 
 ```asm
 mulh rd, rs1, rs2
 ```
+
+In Jolt there is no `mulh`. 
+Instead we replace it with the following instructions.
 
 ```rust
 asm.emit_i::<VirtualMovsign>(*v_sx, self.operands.rs1, 0);
@@ -132,48 +149,58 @@ asm.emit_r::<ADD>(*v_0, *v_0, *v_sx);
 asm.emit_r::<ADD>(self.operands.rd, *v_0, *v_sy);
 ```
 
-#theorem[
-Define machine state to be the triple of values in registers (`rd, rs1`,`rs2`).
-The machine state before and after executing instructions in @code:mul-h and @code:v-mulh is identical.
-]<thm2>
-#proof[
+What we want to show is that after we execute the above block, the value in `rd` will be exactly the same as it would have been had we just executed the native `mulhu` instruction. 
+Furthermore, no other registers or memory location should be affected, and the program counter should go up by exactly the amount needed in the native instruction set. 
+
+> **THEOREM**: The machine state before and after executing instructions `mulh` and the virtual-sequence shown above is identical.
+
+Consulting the [Jolt ISA](@/references/jolt-isa.md), we have that 
+
+1. `VirtualMovsign(rd, rs1, imm)`: Sets `rd` to -1 (or the all ones bit string) if the sign bit of the contents of `rs1` is on. Else it sets `rd` to 0. Succinctly, `x[rd] = (x[rs1] has sign bit set) ? -1 : 0` 
+2. `MULHU`: Computes the upper half of the unsigned product of `rs1` and `rs2`, storing the high bits in `rd`.
+3. `MUL`: Multiplies contents of `rs1` by contents of `rs2` as signed integers, and stores the lower `XLEN` bits of the product in `rd` as a signed integer. 
+4. `ADD`: Adds the contents of `rs1` to the contents of `rs2` as signed integers, and stores the lower `XLEN` bits of the product in `rd` as a signed integer. 
+
+
+We will now prove the theorem on paper, and then give you glimpse of what proving this formally in Lean looks like. 
+Note that we must do this proof for **every** expanded RISCV instruction guarantee correctness[^3]. 
 
 Define variables $z, x, y$ to denote the values in `rd`, `rs1` and `rs2` respectively.
-We are told that $x$ and $y$ have width $w=$`XLEN`=64 bits i.e. $x, y in [-2^(w-1), 2^(w-1)-1]$.
-At the end of the `MULH` instruction, we have $z = floor( (x  y)/2^w)$ i.e the higher $w$ bits of the product.
+We are told that $x$ and $y$ have width $w=$`XLEN` bits $x, y \in [-2^{w-1}, 2^{w-1}-1]$ (as they are interpreted as signed integers).
+At the end of the `MULH` instruction, we have $z = \lfloor \frac{x y}{2^w}\rfloor$ i.e the higher $w$ bits of the product.
 
 We want to show that after the sequence of virtual instructions, the value in $z$ is the exact same.
 We never update $x$ and $y$ so the source registers remain unchanged in both executions.
+`rd` is only updated with the last instruction in the sequence, the remaining operations are done on *virtual registers* (temporary registers that do not exist on RISC-V, so we do not risk overwriting any state). 
+Note that as we are the CPU, it's fine for us to define virtual registers. 
+We will later show that in the end we will prove things about machine state that is equivalent to running the original riscv instruction.
+Note that the virtual instructions do also not touch memory, so we can rest safe that memory is unchanged.
 
-Define variable $s_x := s(x)$ and $s_y:= s(y)$ where $s: [-2^(w-1), 2^(w-1)-1] -> {0,-1}$ such that 
+Define variable $s_x := s(x)$ and $s_y:= s(y)$ where $s: [-2^{w-1}, 2^{w-1}-1] -> \\{0,-1\\}$, capturing the `MovSign` instruction such that 
 
-$ s(Z) := cases(
-  0 "if" Z >= 0,
-  -1 "otherwise",
-) $
+$$ s(Z) = -1 \text{ if $Z < 0 $ otherwise, $0$}$$
 
-Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively.
+Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively, but interpreted as signed integers.:
 Let $x'$ and $y'$ denote the values in in `rs1` and `rs2` respectively but interpreted as unsigned integers.
-That is $x', y' in [0, 2^w -1]$.
-It is a well known fact that $x = x' - s_x  2^w$ and $y = y' - s_y  2^w$.
+That is $x', y' \in [0, 2^{w -1}]$.
+
+It is a well known fact that :
+$$x = x' - s_x  2^w$$
+$$y = y' - s_y  2^w$$
+
 Therefore, 
 
-$
-x  y = x' y' + s_x y' 2^w + s_y 2^w x' - s_x s_y 2^(2w) \
-$
+$$x  y = x' y' + s_x y' 2^w + s_y 2^w x' - s_x s_y 2^{2w}$$
 
 Dividing and applying the floor operation 
 
-$
-floor((x  y)/2^w) = floor((x'  y')/2^w) + s_x y' + s_y x' - s_x s_y 2^(w) \
-$
+$$\lfloor \frac{xy}{2^w}\rfloor = \lfloor \frac{x'  y'}{2^w} \rfloor + s_x y' + s_y x' - s_x s_y 2^{w}$$
  
-Note that as registers are `w` bits in width, we are essentially doing all calculations modulo $2^w$. 
-This means that  $s_x s_y 2^(w) equiv 0 mod 2^w$.
+Note that as registers are $w$=`XLEN` bits in width, so we are essentially doing all calculations modulo $2^w$. 
+This means that  $s_x s_y 2^{w} \equiv 0 \mod 2^w$.
 Thus, we can safely drop the last term.
 
-$
-floor((x  y)/2^w) = floor((x'  y')/2^w) + s_x y' + s_y x' $
+$$\lfloor \frac{x  y}{2^w}\rfloor = \lfloor \frac{x'  y'}{2^w}\rfloor + s_x y' + s_y x' $$
  
 Now we re-examine the assembly code. 
 ```rust
@@ -188,7 +215,7 @@ Then,
 asm.emit_r::<MULHU>(*v_0, self.operands.rs1, self.operands.rs2);
 ```
 
-Sets virtual register $v_0$ to $v_0 = floor((x'  y')/2^w)$ 
+Sets virtual register $v_0$ to $v_0 = \lfloor(x'  y')/2^w\rfloor$ 
 
 ```rust
 asm.emit_r::<MUL>(*v_sx, *v_sx, self.operands.rs2);
@@ -206,17 +233,33 @@ Set register $s_y = s_y x'$
 asm.emit_r::<ADD>(*v_0, *v_0, *v_sx);
 ```
 
-Sets virtual register `v_0` to $floor((x'  y')/2^w) + s_x y'$ 
+Sets virtual register `v_0` to $\lfloor(x'  y')/2^w \rfloor + s_x y'$ 
 ```rust
 asm.emit_r::<ADD>(self.operands.rd, *v_0, *v_sy);
 ```
-Set the value in destination register $z$ to $z=floor((x'  y')/2^w) + s_x y' + s_y x'$  which concludes the proof. 
-]
-## Appendix 
+Set the value in destination register $z$ to $z=\lfloor (x'  y')/2^w \rfloor + s_x y' + s_y x'$  which concludes the proof. 
 
-### Appendix A {#appendix-a}
+### The Remaining Expansion Proofs 
+
+[See this incomplete draft](TODO:) for a full list of proofs. 
+
+### Glimpses Of A Lean Proof 
+
+
+## A Side By Side Comparison Of Real Outputs
+
+## What's Next
+
+At this point we have the high level rust program compiled to a format the Jolt CPU understand. 
+We've added instructions to the riscv architecture, and will have verified formally, that it is okay to do so. 
+Now we describe how we emulate an actual CPU, and run the code in the [emulation](@/jolt-walkthrough/2_emulation.md) chapter
+
+## Appendices
+
+### Appendix A: Jolt Instruction Set {#appendix-a}
 
 The Jolt data structure listing every instruction.
+
 
 ```rust
 pub enum Instruction {
@@ -352,3 +395,12 @@ pub enum Instruction {
     }
 }    
 ```
+### Appendix B: The RISCV Elf
+
+
+
+### Appendix C: The Jolt Bytecode 
+
+## Footnotes
+
+[^3]: More formally, we mean as correct as the original riscv assembly file.
