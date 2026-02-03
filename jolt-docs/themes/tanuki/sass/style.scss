@@ -184,3 +184,47 @@ sup.footnote-reference a:hover {
 .footnote-backref:hover {
   text-decoration: underline;
 }
+
+/* Add to your main stylesheet */
+.comparison-single {
+  margin: 1.5rem 0;
+}
+
+.comparison-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin: 1.5rem 0;
+}
+
+.comparison-left,
+.comparison-right {
+  padding: 0;
+}
+
+.comparison-error {
+  border: 1px solid #ff6b6b;
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* Optional: Add vertical separator */
+.comparison-left {
+  border-right: 1px solid #e0e0e0;
+  padding-right: 2rem;
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 768px) {
+  .comparison-dual {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-left {
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+    padding-right: 0;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+  }
+}

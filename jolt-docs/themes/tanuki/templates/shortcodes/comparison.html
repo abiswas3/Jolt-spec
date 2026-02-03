@@ -1,0 +1,23 @@
+{# templates/shortcodes/comparison.html #} {% set content = body | safe %} {%
+set parts = content | split(pat="---") %} {% if parts | length == 1 %} {# Single
+column - no separator found #}
+<div class="comparison-single">{{ content | markdown | safe }}</div>
+{% elif parts | length == 2 %} {# Two columns - separator found #}
+<div class="comparison-dual">
+  <div class="comparison-left">{{ parts[0] | markdown | safe }}</div>
+  <div class="comparison-right">{{ parts[1] | markdown | safe }}</div>
+</div>
+{% else %} {# More than one separator - just render as is with warning #}
+<div class="comparison-error">
+  <p>
+    <em
+      >Warning: Multiple --- separators found. Using first two sections
+      only.</em
+    >
+  </p>
+  <div class="comparison-dual">
+    <div class="comparison-left">{{ parts[0] | markdown | safe }}</div>
+    <div class="comparison-right">{{ parts[1] | markdown | safe }}</div>
+  </div>
+</div>
+{% endif %}
