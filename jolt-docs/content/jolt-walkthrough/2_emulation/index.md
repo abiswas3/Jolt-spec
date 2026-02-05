@@ -542,3 +542,9 @@ We do not discuss the `OpeningAccumulator` as we will cover it in detail during 
 ### Preprocessing 
 
 TODO:
+
+## Appendices
+
+### Appendix A: The Entire Trace File 
+
+TODO:
