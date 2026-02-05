@@ -47,11 +47,10 @@ Essentially what we have done from the users perspective, is that we have reduce
 
 {% mermaid() %}
 sequenceDiagram
-    participant User
-    participant Prover 
-    User->>Prover: Run fibonacci program with n=5, provide proof 
-    Prover->>User: The answer is 5, and here's a proof π  
-    User->>Prover: I accept your proof, so 5 is the correct answer
+    participant JoltCompiler as Jolt Compiler
+    participant JoltEmulator as Jolt Emulator
+    participant JoltProverDS as Jolt Prover Data Structures
+    participant JoltConstraints as Jolt Constraint
 {% end %}
 
 That is all there is to Jolt. Nothing more, nothing less. 

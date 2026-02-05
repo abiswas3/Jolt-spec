@@ -5,6 +5,15 @@ weight = 3
 
 ## Overview 
 
+{% mermaid() %}
+sequenceDiagram
+    participant JC as Jolt Compiler
+    participant JE as Jolt Emulator
+    participant JP as Jolt Prover Data Structures
+    participant JCon as Jolt Constraints
+
+{% end %}
+
 The goal of this phase is to go from sequence of instructions in Jolt-assembly to trace of execution.
 As we are emulating an entire CPU there is a lot of code that gets run in this section. 
 However, as this series is about understanding how Jolt works, we abstract over implementation details such as how we implemented a memory efficient tracer. 
