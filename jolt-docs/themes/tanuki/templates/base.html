@@ -260,9 +260,9 @@
     {# ===== Stylesheets ===== #}
     <link rel="stylesheet" href="{{ get_url(path='style.css') | safe }}">
 
-    {# Syntax highlighting #}
-    <!-- <link rel="stylesheet" href="{{ get_url(path='syntax-light.css') | safe }}" media="(prefers-color-scheme: light)"> -->
-    <!-- <link rel="stylesheet" href="{{ get_url(path='syntax-dark.css') | safe }}" media="(prefers-color-scheme: dark)"> -->
+    {# Syntax highlighting - toggled by theme JS #}
+    <link rel="stylesheet" href="{{ get_url(path='giallo-light.css') | safe }}" id="syntax-light" media="none">
+    <link rel="stylesheet" href="{{ get_url(path='giallo-dark.css') | safe }}" id="syntax-dark" media="all">
 
     {# ===== Preload fonts ===== #}
     <link rel="preload" href="{{ get_url(path='fonts/Geist-Variable.woff2') | safe }}" as="font" type="font/woff2" crossorigin>
@@ -295,12 +295,22 @@
             document.documentElement.dataset.themeSetting = colorSchemeItem;
 
             // Set effective theme (light/dark)
+            var effectiveTheme;
             if (colorSchemeItem == 'dark' || colorSchemeItem === 'auto' && supportDarkMode) {
                 document.documentElement.dataset.userColorScheme = 'dark';
                 document.documentElement.setAttribute('data-theme', 'dark');
+                effectiveTheme = 'dark';
             } else {
                 document.documentElement.dataset.userColorScheme = 'light';
                 document.documentElement.setAttribute('data-theme', 'light');
+                effectiveTheme = 'light';
+            }
+            // Toggle syntax highlighting stylesheets
+            var sl = document.getElementById('syntax-light');
+            var sd = document.getElementById('syntax-dark');
+            if (sl && sd) {
+                sl.media = effectiveTheme === 'light' ? 'all' : 'none';
+                sd.media = effectiveTheme === 'dark' ? 'all' : 'none';
             }
         })();
     </script>
@@ -315,6 +325,13 @@
                     : stored;
                 document.documentElement.setAttribute('data-theme', theme);
                 document.documentElement.setAttribute('data-theme-setting', stored);
+                // Toggle syntax highlighting stylesheets
+                var sl = document.getElementById('syntax-light');
+                var sd = document.getElementById('syntax-dark');
+                if (sl && sd) {
+                    sl.media = theme === 'light' ? 'all' : 'none';
+                    sd.media = theme === 'dark' ? 'all' : 'none';
+                }
             } catch(e) {}
         })();
     </script>

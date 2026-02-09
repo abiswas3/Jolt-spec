@@ -6,7 +6,7 @@ pre {
   position: relative;
   margin: 1.5rem 0;
   padding: 0;
-  // background: var(--color-bg-elevated);
+  background: var(--ctp-mantle);
   border: 2px solid var(--color-border-subtle, var(--color-border));
   border-radius: var(--radius-lg, 12px);
   overflow: hidden;
@@ -44,8 +44,8 @@ pre[data-lang]::before {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
-  background: #1e1e2e; // Catppuccin Mocha base
-  border-bottom: 1px solid #313243;
+  background: var(--ctp-mantle);
+  border-bottom: 1px solid var(--ctp-surface0);
 }
 
 // Copy button
@@ -294,163 +294,8 @@ pre code .highlighted {
   border-left: 3px solid var(--color-accent);
 }
 
-// =============================================================================
-// Catppuccin Syntax Highlighting (for Zola CSS highlighting mode)
-// Zola uses syntect which generates detailed .z-* classes
-// =============================================================================
-
-pre code {
-
-  // Comments (all types)
-  [class*="z-comment"] {
-    color: var(--ctp-overlay1);
-    font-style: italic;
-  }
-
-  // Strings (all types)
-  [class*="z-string"] {
-    color: var(--ctp-green);
-  }
-
-  // Numbers and constants
-  [class*="z-constant"] {
-    color: var(--ctp-peach);
-  }
-
-  // Keywords (control flow, storage, etc.)
-  [class*="z-keyword"] {
-    color: var(--ctp-mauve);
-  }
-
-  // Storage types (const, let, var, function, class)
-  [class*="z-storage"] {
-    color: var(--ctp-mauve);
-  }
-
-  // Operators
-  [class*="z-keyword"][class*="z-operator"] {
-    color: var(--ctp-sky);
-  }
-
-  // Punctuation
-  [class*="z-punctuation"] {
-    color: var(--ctp-overlay2);
-  }
-
-  // Function calls and definitions
-  [class*="z-entity"][class*="z-name"][class*="z-function"],
-  [class*="z-support"][class*="z-function"] {
-    color: var(--ctp-blue);
-  }
-
-  // Types and classes
-  [class*="z-entity"][class*="z-name"][class*="z-type"],
-  [class*="z-support"][class*="z-type"],
-  [class*="z-support"][class*="z-class"] {
-    color: var(--ctp-yellow);
-  }
-
-  // Variables
-  [class*="z-variable"] {
-    color: var(--ctp-text);
-  }
-
-  // Variable functions (function names when called)
-  [class*="z-variable"][class*="z-function"] {
-    color: var(--ctp-blue);
-  }
-
-  // Properties
-  [class*="z-variable"][class*="z-property"],
-  [class*="z-meta"][class*="z-object-literal"][class*="z-key"] {
-    color: var(--ctp-lavender);
-  }
-
-  // Built-in support (console, process, etc.)
-  [class*="z-support"][class*="z-variable"],
-  [class*="z-support"][class*="z-object"] {
-    color: var(--ctp-red);
-  }
-
-  // HTML/XML Tags
-  [class*="z-entity"][class*="z-name"][class*="z-tag"] {
-    color: var(--ctp-blue);
-  }
-
-  // HTML/XML Attributes
-  [class*="z-entity"][class*="z-other"][class*="z-attribute"] {
-    color: var(--ctp-yellow);
-  }
-
-  // Import/export
-  [class*="z-keyword"][class*="z-control"][class*="z-import"],
-  [class*="z-keyword"][class*="z-control"][class*="z-export"],
-  [class*="z-keyword"][class*="z-control"][class*="z-from"] {
-    color: var(--ctp-mauve);
-  }
-
-  // Async/await
-  [class*="z-keyword"][class*="z-control"][class*="z-flow"] {
-    color: var(--ctp-mauve);
-  }
-
-  // Special characters and escape sequences
-  [class*="z-constant"][class*="z-character"][class*="z-escape"] {
-    color: var(--ctp-pink);
-  }
-
-  // Regex
-  [class*="z-string"][class*="z-regexp"] {
-    color: var(--ctp-peach);
-  }
-
-  // Shell-specific
-  .z-source.z-shell {
-
-    // Commands in shell
-    [class*="z-meta"][class*="z-function-call"] {
-      [class*="z-variable"][class*="z-function"] {
-        color: var(--ctp-blue);
-      }
-    }
-
-    // Arguments
-    [class*="z-meta"][class*="z-arguments"] {
-      color: var(--ctp-text);
-    }
-  }
-
-  // Diff
-  [class*="z-markup"][class*="z-inserted"],
-  [class*="z-diff"][class*="z-inserted"] {
-    color: var(--ctp-green);
-    background: rgba(166, 227, 161, 0.1);
-  }
-
-  [class*="z-markup"][class*="z-deleted"],
-  [class*="z-diff"][class*="z-deleted"] {
-    color: var(--ctp-red);
-    background: rgba(243, 139, 168, 0.1);
-  }
-
-  // Markdown
-  [class*="z-markup"][class*="z-heading"] {
-    color: var(--ctp-red);
-    font-weight: bold;
-  }
-
-  [class*="z-markup"][class*="z-bold"] {
-    font-weight: bold;
-  }
-
-  [class*="z-markup"][class*="z-italic"] {
-    font-style: italic;
-  }
-
-  [class*="z-markup"][class*="z-link"] {
-    color: var(--ctp-blue);
-  }
-}
+// Syntax highlighting colors are provided by giallo-dark.css / giallo-light.css
+// which are toggled by the theme JS based on [data-theme]
 
 // Light theme: white background for code blocks
 [data-theme="light"] pre {

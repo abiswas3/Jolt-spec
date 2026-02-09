@@ -5,7 +5,7 @@ weight = 1
 katex = true
 +++
 
-## TLDR - What is Jolt anyway
+## TLDR - What is Jolt anyway?
 
 A user[^1] wishes to delegate some computation to Jolt, in return for a promise that Jolt will perform said computation as prescribed.
 By computation, in this document we will always refer to a program written in a high-level programming language (such as Rust, C++, etc.), and by guarantee, we mean that Jolt will certify that the program was executed correctly.
@@ -43,7 +43,7 @@ It hands a program to Jolt along with program inputs.
 Jolt in return performs the computation described by the program and hands over a proof $\pi$ that it did things correctly.
 The user checks this proof using the verifying algorithm.
 If the verifying algorithm says the proof is okay, then the user just accepts the prover's claimed output as the true answer (as if they had done the computation themselves).
-Essentially what we have done from the users perspective, is that we have reduced the users task of executing a program to that of checking a proof.
+Essentially what we have done from the user's perspective, is that we have reduced the user's task of executing a program to that of checking a proof.
 
 {% mermaid() %}
 sequenceDiagram
@@ -117,7 +117,7 @@ It is a record of the program state (the registers, memory, program counter, fla
 
 > **Thing To Ponder**: This Jolt assembly program that we execute, how do we know is actually even the original program the user wrote? 
 Such skepticism is well-founded. 
-The `rustc` compiler and `LLVM` framework is audited and worked on consistently, by experienced developers. 
+The `rustc` compiler and `LLVM` framework are audited and worked on consistently, by experienced developers. 
 Although we are not 100% guaranteed it is entirely free of bugs, we can be fairly confident in its correctness (at least this is the world we currently live in). 
 Jolt assembly on the other hand is something we just made up.
 Why should you trust this? 
@@ -128,8 +128,8 @@ When the formal verification engine is ready, we will provide a link to formally
 >
 >If we were to successfully formally verify this step, then we have the following guarantee. If you trusted the original assembly file, then you can trust the new Jolt assembly file.
 
-We know that Jolt assembly accurately describes the high level rust program, but how do we know that this Jolt CPU ran things properly? 
-That is the trace is as expected.
+We know that Jolt assembly accurately describes the high-level Rust program, but how do we know that this Jolt CPU ran things properly?
+That is, the trace is as expected.
 Well, this is the Jolt problem after all. 
 Jolt is meant to give us a "proof" that it runs all instructions according to the ISA.
 But proofs are found in maths textbooks. 
@@ -149,11 +149,11 @@ The Jolt back-end will receive these equations, and will prove that these equati
 The nomenclature is rather unfortunate, as zk stands for zero-knowledge - a type of proof with special properties that Jolt will eventually satisfy.
 Zero knowledge, however, has little to do with the main technical concepts that illuminate the magic of Jolt.
 What we really want to say is that the Jolt prover outputs a proof, such that verifying this proof should take less time than it should for the user to run the program themselves.
-That's the real goal. Such proofs are often be referred to as SNARKs[^2] in the literature.
+That's the real goal. Such proofs are often referred to as SNARKs[^2] in the literature.
 
 Okay, even if the polynomial constraints are satisfied, how do we know that means that the program is correct?
 This is our **second formal verification** task. 
-We must show that if we these constraints were satisfied, then we can rest safe and know the Jolt CPU did the right thing.
+We must show that if these constraints were satisfied, then we can rest safe and know the Jolt CPU did the right thing.
 
 ### The Back End 
 
@@ -175,7 +175,7 @@ sequenceDiagram
 
 From the trace, we get a system of polynomial equations. 
 The full list can be found in [constraints](@/references/constraints.md) section of the references chapter. 
-The main question here is how does one prove these constraints are satisfied, without actually solving the left- and right-hand sides of the equations themselves.
+The main question here is how does one prove these constraints are satisfied, without actually solving the left- and right-hand sides of the equations themselves?
 This is where the [sumcheck](@/references/sumchecks.md) algorithm comes into the picture.
 We will first describe these sum-checks in an idealised setting, and then finally in the chapter on [commitments](TODO:), we will unravel the practical mysteries of instantiating sum-checks.
 We leave the overview of the back-end short, as without seeing the details we feel it is only more confusing.

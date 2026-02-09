@@ -31,6 +31,14 @@
     const effective = getEffectiveTheme(theme);
     document.documentElement.setAttribute('data-theme', effective);
     document.documentElement.setAttribute('data-theme-setting', theme);
+
+    // Toggle syntax highlighting stylesheets
+    const syntaxLight = document.getElementById('syntax-light');
+    const syntaxDark = document.getElementById('syntax-dark');
+    if (syntaxLight && syntaxDark) {
+      syntaxLight.media = effective === 'light' ? 'all' : 'none';
+      syntaxDark.media = effective === 'dark' ? 'all' : 'none';
+    }
   }
 
   // Save theme preference

@@ -5,7 +5,7 @@ weight = 2
 
 In this section, we provide full details of the compilation phase of Jolt. 
 At the end of this stage, we should have a data structure in memory called the `bytecode` which fully describes the user program in Jolt assembly.
-That is we will cover all the parts shown in green in this section.
+That is, we will cover all the parts shown in green in this section.
 
 {% mermaid() %}
 %%{init:{'themeCSS':'g:nth-child(1) rect.actor { stroke:blue;fill: pink; }; g:nth-of-type(5) rect.actor { stroke:blue;fill: pink; };'}}%%
@@ -26,22 +26,22 @@ sequenceDiagram
 
 **NOTE**: This section of the Jolt code base is public knowledge. 
 The user can inspect the binary that runs the compilation phase. 
-In fact they can run this this phase themselves.
-Later we will discuss parts of Jolt, the user does not get to see.
+In fact, they can run this phase themselves.
+Later we will discuss parts of Jolt the user does not get to see.
 
 ## RISC-V-IMAC 
 
-The entry point for the user the following command
+The entry point for the user is the following command
 
 ```bash
 cargo run --release -p jolt-core profile --name fibonacci
 ```
 
-which tells Jolt execute the program described in `jolt/examples/fibonacci/guest/src/lib.rs` (the same as one described in the [overview](@/jolt-walkthrough/0_overview/index.md)), and send me a proof that Jolt correctly executed said program.
+which tells Jolt to execute the program described in `jolt/examples/fibonacci/guest/src/lib.rs` (the same as one described in the [overview](@/jolt-walkthrough/0_overview/index.md)), and send me a proof that Jolt correctly executed said program.
 
-As mentioned earlier, Jolt only accepts inputs written Jolt assembly, which is constructed by extending the instruction set with *inlines* and *virtual instructions*.
+As mentioned earlier, Jolt only accepts inputs written in Jolt assembly, which is constructed by extending the instruction set with *inlines* and *virtual instructions*.
 Before we get to virtual instructions, the first step is to compile the program down to an [elf](https://wiki.osdev.org/ELF) file with `risc-v-imac` instructions.
-To do this, we draw the readers attention to the line `self.build(DEFAULT_TARGET_DIR);`found in `jolt/jolt-core/src/host/program.rs`. 
+To do this, we draw the reader's attention to the line `self.build(DEFAULT_TARGET_DIR);` found in `jolt/jolt-core/src/host/program.rs`. 
 Under the hood - Jolt runs the following command
 
 ```bash
@@ -69,21 +69,21 @@ Rust (via LLVM) uses the standard [target triple format](https://docs.rs/target-
 ```
 
 + Architecture: `riscv64` says use the base instruction set with 64 bit registers. `imac` says uses the `i`, `m`, `a`, `c` [(see sections 11, 12, 13, and 27 for details)](https://docs.riscv.org/reference/isa/unpriv/unpriv-index.html). 
-+ Vendor: We are not targeting CPU's made by a specific vendor here. 
++ Vendor: We are not targeting CPUs made by a specific vendor here. 
 + Operating System: All our guest programs are run with `#![no_std]`, so when we say `none` here, we mean the assembly should run on bare-metal or embedded systems.
 + Output format: we choose the `elf` format to output the file and we ask the compiler to put the executable in the following directory `/tmp/jolt-guest-targets/fibonacci-guest-` 
 
 The output of this command is "An ELF executable for RISC-V RV64IMAC: 
-We also tell the `rustc` compiler to use our linker script located at `/tmp/jolt-guest-linkers/fibonacci-guest.ld`, which allows to define the memory layout of our assembly code.
+We also tell the `rustc` compiler to use our linker script located at `/tmp/jolt-guest-linkers/fibonacci-guest.ld`, which allows us to define the memory layout of our assembly code.
 The other flags -- tell the compiler that it should simply abort if it encounters a panic, instead of recursively trying to find the source of the error, we do not want debug information or symbols in the final binary, and to perform all optimisations as needed.
 
-> At this moment in time we should have an [elf file](TODO:) located in the `/tmp/jolt-guest-targets/fibonacci-guest-/` directory. Additionally, the liner script can be found [here](TODO:)
+> At this moment in time we should have an [elf file](TODO:) located in the `/tmp/jolt-guest-targets/fibonacci-guest-/` directory. Additionally, the linker script can be found [here](TODO:)
 
 ## Jolt Bytecode
 
 
 The next step is to convert this elf file into Jolt bytecode.
-The bytecode will a vector of `Instruction` defined in `jolt/tracer/src/instruction/mod.rs` under 
+The bytecode will be a vector of `Instruction` defined in `jolt/tracer/src/instruction/mod.rs` under 
 
 ```rust
 macro_rules! define_rv32im_enums {
@@ -141,7 +141,7 @@ So as discussed in the original [Jolt paper](https://eprint.iacr.org/2023/1217),
 This is okay to do. 
 After all the Jolt CPU is something we made up. 
 It can execute any instruction architecture we want.
-What we really want is that after executing out made up sequence, we end up in the same machine state as we would have, had we executed the original RISC-V instruction.
+What we really want is that after executing our made up sequence, we end up in the same machine state as we would have, had we executed the original RISC-V instruction.
 The block of code responsible for this expansion is listed below found in `jolt-core/src/guest/program.rs`
 
 ```rust
@@ -200,7 +200,7 @@ Consulting the [Jolt ISA](@/references/jolt-isa.md), we have that
 
 
 We will now prove the theorem on paper, and then give you glimpse of what proving this formally in Lean looks like. 
-Note that we must do this proof for **every** expanded RISCV instruction guarantee correctness[^3]. 
+Note that we must do this proof for **every** expanded RISCV instruction to guarantee correctness[^3]. 
 
 Define variables $z, x, y$ to denote the values in `rd`, `rs1` and `rs2` respectively.
 We are told that $x$ and $y$ have width $w=$`XLEN` bits $x, y \in [-2^{w-1}, 2^{w-1}-1]$ (as they are interpreted as signed integers).
@@ -217,11 +217,11 @@ Define variable $s_x := s(x)$ and $s_y:= s(y)$ where $s: [-2^{w-1}, 2^{w-1}-1] -
 
 $$ s(Z) = -1 \text{ if $Z < 0 $ otherwise, $0$}$$
 
-Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively, but interpreted as signed integers.:
+Remember $x$ and $y$ just denote the values in `rs1` and `rs2` respectively, but interpreted as signed integers:
 Let $x'$ and $y'$ denote the values in in `rs1` and `rs2` respectively but interpreted as unsigned integers.
 That is $x', y' \in [0, 2^{w -1}]$.
 
-It is a well known fact that :
+It is a well-known fact that:
 $$x = x' - s_x  2^w$$
 $$y = y' - s_y  2^w$$
 
@@ -340,10 +340,10 @@ theorem jolt_correct (r1 r2 : BitVec 64) : jolt_mulh r1 r2 = mulh r1 r2 := by
 
 Now that we have seen an example of instruction expansion, let's look at one in the wild. 
 Remember the rust fibonacci program discussed in the [overview](@/jolt-walkthrough/0_overview/index.md).
-`rustc` and `llvm` compile that into the `.elf` file describd in [Appendix B](#appendix-b-the-riscv-elf).
-Then in [Appendix C](#appendix-c-the-jolt-bytecode) we how that code is morphed into the final Jolt byte code. 
-It will be useful to stare at the two files for a minute to see equivalences, at least certain sections of the codde.
-This exercise dmystifies the compilation process proving there really is no magic to this.
+`rustc` and `llvm` compile that into the `.elf` file described in [Appendix B](#appendix-b-the-riscv-elf).
+Then in [Appendix C](#appendix-c-the-jolt-bytecode) we see how that code is morphed into the final Jolt byte code. 
+It will be useful to stare at the two files for a minute to see equivalences, at least certain sections of the code.
+This exercise demystifies the compilation process proving there really is no magic to this.
 
 The riscv elf file starts with 
 ```asm
@@ -356,7 +356,7 @@ and the Jolt bytecode starts at
 AUIPC(AUIPC { address: 2147483648, operands: FormatU { rd: 2, imm: 4096 }, virtual_sequence_remaining: None, is_first_in_sequence: false, is_compressed: false })
 ```
 where `rd2` is linked to the stack pointer and `2147483648` in decimal is `0x80000000` in hexadecimal. 
-This instruction in not expanded by Jolt, and there is a 1:1 mapping between riscv and Jolt.
+This instruction is not expanded by Jolt, and there is a 1:1 mapping between riscv and Jolt.
 Finally, our immediate in decimal is `4096` which quite literally is `0x1 << 12`.  
 
 The second instruction also aligns
@@ -431,14 +431,14 @@ VirtualSRAI(VirtualSRAI { address: 2147483716, operands: FormatVirtualRightShift
 
 > **NOTE**: The program counter (i.e address) never updates in virtual instructions. 
 
-So there we have it. We now how to get Jolt-bytecode.
+So there we have it. We now know how to get Jolt-bytecode.
 
 
 ## What's Next
 
-At this point we have the high level rust program compiled to a format the Jolt CPU understand. 
-We've added instructions to the riscv architecture, and will have verified formally, that it is okay to do so. 
-Now we describe how we emulate an actual CPU, and run the code in the [emulation](@/jolt-walkthrough/2_emulation/index.md) chapter
+At this point we have the high-level Rust program compiled to a format the Jolt CPU understands. 
+We've added instructions to the riscv architecture, and will have verified formally that it is okay to do so. 
+Now we describe how we emulate an actual CPU, and run the code in the [emulation](@/jolt-walkthrough/2_emulation/index.md) chapter.
 
 ## Appendices
 
