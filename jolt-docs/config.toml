@@ -13,7 +13,7 @@ generate_feeds = false
 
 [markdown.highlighting]
 style = "class"
-dark_theme = "gruvbox-dark-hard"
+dark_theme = "vitesse-dark"
 light_theme = "one-light"
 
 [extra]
