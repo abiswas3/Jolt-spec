@@ -243,6 +243,13 @@
     {# ===== Stylesheets ===== #}
     <link rel="stylesheet" href="{{ get_url(path='style.css') | safe }}">
 
+    {# Extra stylesheets from config.extra.styles #}
+    {% if config.extra.styles is defined %}
+      {% for style in config.extra.styles %}
+    <link rel="stylesheet" href="{{ get_url(path=style) | safe }}">
+      {% endfor %}
+    {% endif %}
+
     {# Syntax highlighting - toggled by theme JS #}
     <link rel="stylesheet" href="{{ get_url(path='giallo-light.css') | safe }}" id="syntax-light" media="none">
     <link rel="stylesheet" href="{{ get_url(path='giallo-dark.css') | safe }}" id="syntax-dark" media="all">
