@@ -298,11 +298,11 @@ pre code .highlighted {
 
 // Light theme: white background for code blocks
 [data-theme="light"] pre {
-  background: #fff;
+  background: #faf4ed;
   border-color: var(--color-border);
 }
 
 [data-theme="light"] pre[data-lang]::before {
-  background: var(--ctp-base);
+  background: #f2e9e1;
   border-bottom-color: var(--color-border);
 }
