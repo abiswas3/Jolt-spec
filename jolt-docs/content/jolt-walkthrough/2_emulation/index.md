@@ -597,7 +597,12 @@ A `Some(j)` entry means column $j$ is hot; `None` means the entire row is zero (
 
 $d_\\text{instr}$ length-$T$ arrays (16 for large traces, 32 for small ones). Each array corresponds to one digit of the decomposed lookup index.
 
-**Cell $j$ of array $i$** stores the $i$-th digit of the 128-bit lookup index at cycle $j$. This digit tells us which column is "hot" in the $i$-th one-hot matrix at row $j$.
+Unlike `BytecodeRa` and `RamRa`, the "address" here is not a memory address or a program counter.
+It is a 128-bit **lookup table index** formed by interleaving the *values* of the instruction's two operands (typically the contents of `rs1` and `rs2`).
+For example, if at cycle $j$ the instruction has `rs1_value = 5` and `rs2_value = 3`, then the lookup index is `interleave_bits(5, 3)` -- a 128-bit number with 5's bits at even positions and 3's bits at odd positions.
+This is the index into the instruction's decomposable lookup table, and it is this 128-bit value that gets decomposed into $d$ digits.
+
+**Cell $j$ of array $i$** stores the $i$-th digit of that 128-bit lookup index at cycle $j$.
 
 ```
 InstructionRa(0): [ digit₀(idx₀),  digit₀(idx₁),  digit₀(idx₂),  ...  digit₀(idx_T) ]
@@ -605,10 +610,9 @@ InstructionRa(1): [ digit₁(idx₀),  digit₁(idx₁),  digit₁(idx₂),  ...
        ⋮                ⋮               ⋮               ⋮                    ⋮
 InstructionRa(d-1): [ digit_{d-1}(idx₀), ... ]
 
-where idx_j = interleave_bits(x_j, y_j)  is the 128-bit lookup index at cycle j
+where idx_j = interleave_bits(rs1_value_j, rs2_value_j)
 ```
 
-The lookup index is formed by interleaving the two instruction operands.
 The `to_lookup_index` method ([`instruction/mod.rs:32`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/instruction/mod.rs#L32)) computes this:
 
 ```rust
@@ -618,8 +622,8 @@ fn to_lookup_index(&self) -> u128 {
 }
 ```
 
-where `interleave_bits` ([`utils/mod.rs:145`](https://github.com/a16z/jolt/blob/main/jolt-core/src/utils/mod.rs#L145)) places $x$'s bits at even positions and $y$'s bits at odd positions of a 128-bit value.
-This interleaving is what makes Jolt's decomposable lookup tables work -- each chunk of the interleaved index corresponds to a small sub-table lookup.
+where `interleave_bits` ([`utils/mod.rs:145`](https://github.com/a16z/jolt/blob/main/jolt-core/src/utils/mod.rs#L145)) places $x$'s bits at even positions and $y$'s bits at odd positions.
+Each digit of the decomposed index corresponds to a small sub-table lookup -- this is how Jolt turns one large table lookup into $d$ small ones (the Lasso decomposition).
 
 The witness generation extracts digit $i$ and records it as the hot column for row $j$ ([`witness.rs:97`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L97)):
 
