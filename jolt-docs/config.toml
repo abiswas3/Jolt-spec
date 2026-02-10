@@ -21,13 +21,11 @@ mode = "docs"
 github = "https://github.com/raskell-io/tanuki"
 edit_url = "https://github.com/raskell-io/tanuki/edit/main/examples/docs/content"
 show_theme_toggle = true
-katex = true
+mathjax = true
 styles = ["mods.css"]
 # Version picker (docs mode only)
 [extra.versions]
-current = "1.2.0"
+current = "1.0.0"
 list = [
-  { version = "1.2.0", url = "/", label = "latest" },
-  { version = "1.1.0", url = "/docs/v1.1/" },
-  { version = "1.0.0", url = "/docs/v1.0/" },
+  { version = "1.0.0", url = "/", label = "latest" },
 ]

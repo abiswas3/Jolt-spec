@@ -7,7 +7,7 @@
   
 <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({ 
+    mermaid.initialize({
         startOnLoad: true,
         theme: 'forest',
         themeVariables: {
@@ -20,11 +20,7 @@
         }
     });
 </script>
-    <!-- <script type="module"> -->
-    <!-- import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs'; -->
-    <!-- mermaid.initialize({ startOnLoad: true }); -->
-    <!-- </script> -->
-    <!---->
+
     {# ===== Primary Meta Tags ===== #}
     <title>{% block title %}{{ page.title | default(value=section.title) | default(value=config.title) }}{% endblock %} | {{ config.title }}</title>
 
@@ -44,27 +40,14 @@
     <meta name="keywords" content="{{ config.extra.keywords }}">
     {% endif %}
 
-    {%- if page.extra.katex or section.extra.katex or config.extra.katex %}
-    <!-- KaTeX CSS -->
-    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous"> -->
-    
-    <!-- KaTeX JS -->
-    <!-- <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script> -->
-     <!-- KaTeX CSS -->
-    <link rel="stylesheet" href="{{ get_url(path='katex.css') }}">
-    
-    <!-- KaTeX JS -->
-    <script defer src="{{ get_url(path='katex.min.js') }}"></script>  
-    <script defer src="{{ get_url(path='katex-init.js') }}"></script>  
-    <!-- KaTeX Auto-render -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
-        onload="renderMathInElement(document.body, {
-            delimiters: [
-                {left: '$$', right: '$$', display: true},
-                {left: '$', right: '$', display: false}
-            ]
-        });"></script>
+    {%- if config.extra.mathjax %}
+    <!-- MathJax configuration (macros defined in static/mathjax-config.js) -->
+    <script src="{{ get_url(path='mathjax-config.js') }}"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js"></script>
     {%- endif %}
+
+    <!-- Footnote scroll/highlight behavior -->
+    <script defer src="{{ get_url(path='footnote-init.js') }}"></script>
 
   	{# Author #}
     {% if config.extra.author is defined %}

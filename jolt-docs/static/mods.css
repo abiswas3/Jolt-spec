@@ -1,3 +1,73 @@
-body {
-  background: black;
+/* Jolt docs overrides */
+
+/* Increase line-height for body text to 2.0 (was 1.75) */
+:root {
+  --leading-loose: 2;
+}
+
+/* Homepage navigation cards */
+.home-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.home-nav__item {
+  display: block;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+  transition: padding-left 0.2s ease;
+}
+
+.home-nav__item:hover {
+  padding-left: 0.5rem;
+  text-decoration: none;
+}
+
+.home-nav__title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+  margin: 0 0 0.25rem;
+}
+
+.home-nav__item:hover .home-nav__title {
+  color: var(--color-accent);
+}
+
+.home-nav__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: var(--leading-relaxed);
+}
+
+/* Footnotes heading */
+.footnotes-heading {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-lg);
+}
+
+/* Footnote highlight on click */
+.footnote-highlight {
+  background: var(--color-bg-elevated);
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+.sup-highlight {
+  background: var(--color-bg-elevated);
+  border-radius: 2px;
+  transition: background 0.3s ease;
+}
+
+.footnote-backref {
+  text-decoration: none;
+  color: var(--color-accent);
 }

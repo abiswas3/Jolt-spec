@@ -137,7 +137,49 @@
 </script>
 
 {% else %}
-{# Original tanuki section layout for docs/book modes #}
+{# Docs/book mode layouts #}
+{% if section.relative_path == "_index.md" %}
+{# ===== HOMEPAGE ===== #}
+{# Content is split on <hr> (markdown ---).
+   Everything before the first <hr> is the intro blurb.
+   Everything after is the references/further reading section.
+   Navigation cards are inserted between the two. #}
+{% set parts = section.content | split(pat="<hr />") %}
+<article class="section-page">
+    <header class="section-page__header">
+        <h1>{{ section.title }}</h1>
+    </header>
+
+    {% if parts[0] is defined %}
+    <div class="section-page__content">
+        {{ parts[0] | safe }}
+    </div>
+    {% endif %}
+
+    {# Navigation cards — pulled from subsection metadata #}
+    {% if section.subsections %}
+    <div class="home-nav">
+        {% for subsection_path in section.subsections %}
+        {% set sub = get_section(path=subsection_path) %}
+        <a href="{{ sub.permalink | safe }}" class="home-nav__item">
+            <h3 class="home-nav__title">{{ sub.title }}</h3>
+            {% if sub.description %}
+            <p class="home-nav__desc">{{ sub.description }}</p>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if parts[1] is defined %}
+    <div class="section-page__content">
+        {{ parts[1] | safe }}
+    </div>
+    {% endif %}
+</article>
+
+{% else %}
+{# ===== Regular subsection ===== #}
 <article class="section-page">
     <header class="section-page__header">
         <h1>{{ section.title }}</h1>
@@ -165,7 +207,6 @@
     </ul>
     {% endif %}
 
-    {# Subsections #}
     {% if section.subsections %}
     {% for subsection_path in section.subsections %}
     {% set subsection = get_section(path=subsection_path) %}
@@ -182,5 +223,6 @@
     {% endfor %}
     {% endif %}
 </article>
+{% endif %}
 {% endif %}
 {% endblock %}

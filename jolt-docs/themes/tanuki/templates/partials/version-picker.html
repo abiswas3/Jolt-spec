@@ -24,6 +24,7 @@
             {% endif %}
         </a>
         {% endfor %}
+        {% if config.extra.versions.list | length > 1 %}
         <hr class="version-picker__divider">
         <a href="{{ get_url(path='appendix/versioning/') | safe }}" class="version-picker__item version-picker__item--link">
             All versions
@@ -33,6 +34,7 @@
                 <line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
         </a>
+        {% endif %}
     </div>
 </div>
 {% endif %}
