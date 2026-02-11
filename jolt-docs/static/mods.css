@@ -94,3 +94,18 @@ a > tt:hover {
   padding: 1rem 1.25rem;
   margin: 1.5rem 0;
 }
+
+/* Excalidraw SVG dark/light mode adaptation */
+img[src$=".svg"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+[data-theme="light"] img[src$=".svg"] {
+  filter: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) img[src$=".svg"] {
+    filter: none;
+  }
+}

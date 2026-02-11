@@ -496,7 +496,7 @@ CommittedPolynomial::RamInc => {
 
 Only the `Write` variant of `RAMAccess` produces a nonzero value; `Read` and `NoOp` both map to 0.
 
-### One-Hot Encoding and the Decomposition into $d$ Chunks
+### 3. `BytecodeRa(d)`
 
 Now we into get something more involved. 
 The remaining three data structures -- `InstructionRa`, `BytecodeRa`, and `RamRa` -- have a parameter $d$ associated with them. 
@@ -505,290 +505,55 @@ To best understand what is going on it's better to talk about a different versio
 Let's use `BytecodeRa` as the motivating example, which we refer to simple as `ra` for short. 
 First we will define another array called `raf` of size $T$, where `raf[j]` stores the PC address of the $j$'th instruction. 
 
+Consider the following toy example: 
 
-Consider `BytecodeRa` as a motivating example (the others work identically).
-At each cycle $t$, the CPU fetches an instruction from some bytecode address.
-The naive representation would be a length-$T$ array where entry $t$ stores that address as a `u64`.
-But Jolt needs something more structured: a **one-hot encoding**.
+We have our RISC-V assembly, and our corresponding Jolt Assembly. 
+Here the total number of instructions is 3 which when padded to the next power of 2 we denote with $K$ is 4, and the total number of cycles or instructions the program ran for is 3 (padded to 4, which will be $T$).
+Instruction number 2 is expanded into 2 instructions by our Jolt Assembly converter. 
+In our toy example, assume that memory starts at `0x1000` so we show both the physical addresses and offsets (which are written inside the rectangles). 
+In the figure J.I refers to Jolt Instruction.
 
-Instead of storing the raw address, we build a $T \times K$ matrix where $K$ is the total number of bytecode memory locations (padded to a power of 2).
-Row $t$ is all zeros except for a single 1 in column $j$, where $j$ is the address accessed at cycle $t$.
+![](./BytecodeRaBasic.svg)
 
-The problem is that $K$ can be very large, making each row impractically wide.
-The fix is to **decompose the address into digits**.
-We write the address as a $d$-digit number in base $N = K^{1/d}$ (since everything is a power of 2, this always works out cleanly).
-Now instead of one $T \times K$ matrix, we get $d$ separate $T \times N$ matrices, each one-hot encoded -- one matrix per digit of the address.
+Then we show an example trace where we run Jolt Instructions 2, 3 and 1 in that order. 
+The `raf` array is just a size $T$ array where location $i$ stores what Jolt Instruction was read at cycle number $i$ in offset format (so don't store the physical address, but instead store the offset).
+`ra` is just `raf` stored in 1-hot encoding format.
+That's all there is too it.
 
-![One-hot decomposition](./onehot_decomposition.svg)
+Now what happens when **$d > 1$?**
 
-To recover the original address from the $d$ digits, we just read them off: if digit $i$ of address $a$ is $c_i$, then
 
-{% math() %}
-$$a = \sum_{i=0}^{d-1} c_i \cdot N^{d-1-i}$$
+In this toy program, we have $K$ quite small and manageable, but a real program might have millions of instructions. 
+If we wanted to one-hot encode that in `ra` we would be looking at very very long rows. 
+Note that this does not affect `raf` which in each cell is just a `u64` number -- it does not care if $K=4$ or $2^{32}$.
+It uses the same space. 
+Now we need to store this one hot encoded version of `raf` for this thing called polynomial commitments we will get to later, but for now assume that we NEED one hot encoding, but we also cannot afford to have very very long rows. 
+So here's what we will do -- we will write the number stored in cell/location of `raf` as a $d$ digit base $N$ number, where $N = K^{1/d}$. As $K$ is a power of 2, any even $d$ is fine.
+See figure below where $K=16$ and $d=2$ so we express addresses as a 2 digit base 4 number.
+
+![](./BytecodeRaGreater.svg)
+
+Once we do that -- we just store each digit as a one-hot encoded matrix. 
+That's it -- there's a lot of code in the Jolt code base that essentially does this transformation. 
+
+{% theorem(type="box") %}
+In summary, `BytecodeRa` is stores $d$ matrices of dimension $T \times K^{1/d}$ where the rows of all matrices are one hot encoded.
+Row $i$, matrix $j$ denotes the $j$'th digit of the expanded Jolt PC stored in offset format. 
 {% end %}
 
-and the full one-hot indicator for address $a$ at cycle $t$ can be reconstructed as the product of the $d$ per-digit indicators.
-In Jolt's notation, $N$ is called $K_\\text{chunk}$ and $d$ varies by polynomial family.
-
-#### Concrete Parameters
-
-The chunk size $K_\\text{chunk}$ is chosen based on trace length ([`config.rs:135`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/config.rs#L135)):
-
-```rust
-let log_k_chunk = if log_T < ONEHOT_CHUNK_THRESHOLD_LOG_T { // threshold = 25
-    4
-} else {
-    8
-};
-```
-
-The number of digits $d$ is then computed as $d = \lceil \log_2(K) / \texttt{log\\\_k\\\_chunk} \rceil$ ([`config.rs:232`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/config.rs#L232)):
-
-```rust
-let instruction_d = LOG_K.div_ceil(log_k_chunk);       // LOG_K = 128 (= 2 × XLEN)
-let bytecode_d = bytecode_k.log_2().div_ceil(log_k_chunk);
-let ram_d = ram_k.log_2().div_ceil(log_k_chunk);
-```
-
-Putting it together:
-
-| Parameter | $\log T < 25$ (small traces) | $\log T \geq 25$ (large traces) |
-|---|---|---|
-| $\texttt{log\\\_k\\\_chunk}$ | $4$ | $8$ |
-| $K_\\text{chunk}$ | $16$ | $256$ |
-| $d_\\text{instr}$ | $128 / 4 = 32$ | $128 / 8 = \mathbf{16}$ |
-| $d_\\text{bc}$ | $\lceil \log_2(K_\\text{bc}) / 4 \rceil$ | $\lceil \log_2(K_\\text{bc}) / 8 \rceil$ |
-| $d_\\text{ram}$ | $\lceil \log_2(K_\\text{ram}) / 4 \rceil$ | $\lceil \log_2(K_\\text{ram}) / 8 \rceil$ |
-
-For instruction lookups, $d$ is always fixed because `LOG_K = 128` (two interleaved 64-bit operands, from [`instruction_lookups/mod.rs:6`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/instruction_lookups/mod.rs#L6): `pub const LOG_K: usize = XLEN * 2`).
-For bytecode and RAM, $d$ depends on the program -- $K_\\text{bc}$ is the bytecode table size and $K_\\text{ram}$ is the RAM address space, both padded to the next power of 2.
-
-For our Fibonacci example ($\log T = 16$, small-trace regime), $K_\\text{chunk} = 16$ and $d_\\text{instr} = 32$.
-
-#### How Digits Are Extracted
-
-In code, the per-digit extraction is a simple bit-shift-and-mask. The three extraction functions live in [`config.rs:275`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/config.rs#L275):
-
-```rust
-pub fn ram_address_chunk(&self, address: u64, idx: usize) -> u8 {
-    ((address >> self.ram_shifts[idx]) & (self.k_chunk - 1) as u64) as u8
-}
-
-pub fn bytecode_pc_chunk(&self, pc: usize, idx: usize) -> u8 {
-    ((pc >> self.bytecode_shifts[idx]) & (self.k_chunk - 1)) as u8
-}
-
-pub fn lookup_index_chunk(&self, index: u128, idx: usize) -> u8 {
-    ((index >> self.instruction_shifts[idx]) & (self.k_chunk - 1) as u128) as u8
-}
-```
-
-The shift arrays are precomputed in big-endian order: `shifts[i] = log_k_chunk * (d - 1 - i)` ([`config.rs:236`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/config.rs#L236)).
-So digit 0 extracts the most-significant chunk of the address, and digit $d-1$ extracts the least-significant chunk.
-
-All the parameters -- $K_\\text{chunk}$, $d$, and the shift arrays -- are held in the `OneHotParams` struct ([`config.rs:206`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/config.rs#L206)):
-
-```rust
-pub struct OneHotParams {
-    pub log_k_chunk: usize,
-    pub k_chunk: usize,
-
-    pub bytecode_k: usize,
-    pub ram_k: usize,
-
-    pub instruction_d: usize,
-    pub bytecode_d: usize,
-    pub ram_d: usize,
-
-    instruction_shifts: Vec<usize>,
-    ram_shifts: Vec<usize>,
-    bytecode_shifts: Vec<usize>,
-    // ...
-}
-```
-
-#### Internal Representation
-
-Rather than materializing the full $T \times K_\\text{chunk}$ matrix, each one-hot matrix is stored as a `OneHotPolynomial` ([`poly/one_hot_polynomial.rs:24`](https://github.com/a16z/jolt/blob/main/jolt-core/src/poly/one_hot_polynomial.rs#L24)). It only stores which column is hot in each row:
-
-```rust
-pub struct OneHotPolynomial<F: JoltField> {
-    pub K: usize,                              // k_chunk (16 or 256)
-    pub nonzero_indices: Arc<Vec<Option<u8>>>,  // length T: which column is hot per row
-    // ...
-}
-```
-
-A `Some(j)` entry means column $j$ is hot; `None` means the entire row is zero (only occurs for `RamRa` when the cycle has no memory access).
 
 
-### 3. `InstructionRa(i)` -- Instruction Lookup One-Hot Polynomials
-
-$d_\\text{instr}$ length-$T$ arrays (16 for large traces, 32 for small ones). Each array corresponds to one digit of the decomposed lookup index.
-
-Unlike `BytecodeRa` and `RamRa`, the "address" here is not a memory address or a program counter.
-It is a 128-bit **lookup table index** formed by interleaving the *values* of the instruction's two operands (typically the contents of `rs1` and `rs2`).
-For example, if at cycle $j$ the instruction has `rs1_value = 5` and `rs2_value = 3`, then the lookup index is `interleave_bits(5, 3)` -- a 128-bit number with 5's bits at even positions and 3's bits at odd positions.
-This is the index into the instruction's decomposable lookup table, and it is this 128-bit value that gets decomposed into $d$ digits.
-
-**Cell $j$ of array $i$** stores the $i$-th digit of that 128-bit lookup index at cycle $j$.
-
-```
-InstructionRa(0): [ digit₀(idx₀),  digit₀(idx₁),  digit₀(idx₂),  ...  digit₀(idx_T) ]
-InstructionRa(1): [ digit₁(idx₀),  digit₁(idx₁),  digit₁(idx₂),  ...  digit₁(idx_T) ]
-       ⋮                ⋮               ⋮               ⋮                    ⋮
-InstructionRa(d-1): [ digit_{d-1}(idx₀), ... ]
-
-where idx_j = interleave_bits(rs1_value_j, rs2_value_j)
-```
-
-The `to_lookup_index` method ([`instruction/mod.rs:32`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/instruction/mod.rs#L32)) computes this:
-
-```rust
-fn to_lookup_index(&self) -> u128 {
-    let (x, y) = LookupQuery::<XLEN>::to_lookup_operands(self);
-    interleave_bits(x, y as u64)
-}
-```
-
-where `interleave_bits` ([`utils/mod.rs:145`](https://github.com/a16z/jolt/blob/main/jolt-core/src/utils/mod.rs#L145)) places $x$'s bits at even positions and $y$'s bits at odd positions.
-Each digit of the decomposed index corresponds to a small sub-table lookup -- this is how Jolt turns one large table lookup into $d$ small ones (the Lasso decomposition).
-
-The witness generation extracts digit $i$ and records it as the hot column for row $j$ ([`witness.rs:97`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L97)):
-
-```rust
-CommittedPolynomial::InstructionRa(idx) => {
-    let row: Vec<Option<usize>> = row_cycles
-        .iter()
-        .map(|cycle| {
-            let lookup_index = LookupQuery::<XLEN>::to_lookup_index(cycle);
-            Some(one_hot_params.lookup_index_chunk(lookup_index, *idx) as usize)
-        })
-        .collect();
-    PCS::process_chunk_onehot(setup, one_hot_params.k_chunk, &row)
-}
-```
-
-Every cycle always produces `Some(...)` (NoOps produce $\texttt{lookup\\\_index} = 0$), so every cell always has a value.
-
-
-### 4. `BytecodeRa(i)` -- Bytecode One-Hot Polynomials
-
-$d_\\text{bc} = \lceil \log_2(K_\\text{bc}) / \texttt{log\\\_k\\\_chunk} \rceil$ length-$T$ arrays (program-dependent count).
-
-**Cell $j$ of array $i$** stores the $i$-th digit of the virtual PC at cycle $j$. The virtual PC is a dense sequential index into the bytecode table.
-
-```
-BytecodeRa(0): [ digit₀(pc₀),  digit₀(pc₁),  digit₀(pc₂),  ...  digit₀(pc_T) ]
-BytecodeRa(1): [ digit₁(pc₀),  digit₁(pc₁),  digit₁(pc₂),  ...  digit₁(pc_T) ]
-       ⋮              ⋮             ⋮              ⋮                   ⋮
-
-where pc_j = virtual PC at cycle j  (0 for NoOps)
-```
-
-The virtual PC is computed by `get_pc` ([`bytecode/mod.rs:36`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/bytecode/mod.rs#L36)):
-
-```rust
-pub fn get_pc(&self, cycle: &Cycle) -> usize {
-    if matches!(cycle, tracer::instruction::Cycle::NoOp) {
-        return 0;
-    }
-    let instr = cycle.instruction().normalize();
-    self.pc_map
-        .get_pc(instr.address, instr.virtual_sequence_remaining.unwrap_or(0))
-}
-```
-
-which delegates to `BytecodePCMapper::get_pc` ([`bytecode/mod.rs:92`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/bytecode/mod.rs#L92)) to convert the raw ELF address into a dense index. NoOps map to PC = 0 (a dummy noop row).
-
-The witness generation extracts digit $i$ from the virtual PC ([`witness.rs:107`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L107)):
-
-```rust
-CommittedPolynomial::BytecodeRa(idx) => {
-    let row: Vec<Option<usize>> = row_cycles
-        .iter()
-        .map(|cycle| {
-            let pc = preprocessing.bytecode.get_pc(cycle);
-            Some(one_hot_params.bytecode_pc_chunk(pc, *idx) as usize)
-        })
-        .collect();
-    PCS::process_chunk_onehot(setup, one_hot_params.k_chunk, &row)
-}
-```
-
-As with `InstructionRa`, every cell always has a value (NoOps map to PC = 0, not `None`).
+This one hot encoding process is identical for `InstructionRa` and `RamRa` as well. 
+The only thing that will be different is what the corresponding `InstructionRaf` and `RamRaf` store.
+So let's get to that. 
 
 
 ### 5. `RamRa(i)` -- RAM Address One-Hot Polynomials
 
-$d_\\text{ram} = \lceil \log_2(K_\\text{ram}) / \texttt{log\\\_k\\\_chunk} \rceil$ length-$T$ arrays (program-dependent count).
+For this section, we will describe the `Raf` version of the `Ra` data structure. 
+We already know how to go from `Raf` to `Ra` by the above description. 
+That part is the exact same. 
 
-**Cell $j$ of array $i$** stores the $i$-th digit of the remapped RAM address at cycle $j$, or `None` if cycle $j$ did not access RAM at all.
-
-```
-RamRa(0): [ Some(c₀),  None,  Some(c₀'),  None,  ...  None ]
-RamRa(1): [ Some(c₁),  None,  Some(c₁'),  None,  ...  None ]
-       ⋮        ⋮        ⋮        ⋮          ⋮          ⋮
-
-Some(cᵢ) = the i-th digit of the remapped RAM address
-None     = no RAM access this cycle
-```
-
-The raw byte address is remapped to a word-aligned index by `remap_address` ([`ram/mod.rs:128`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/ram/mod.rs#L128)):
-
-```rust
-pub fn remap_address(address: u64, memory_layout: &MemoryLayout) -> Option<u64> {
-    if address == 0 {
-        return None;
-    }
-    let lowest_address = memory_layout.get_lowest_address();
-    if address >= lowest_address {
-        Some((address - lowest_address) / 8)
-    } else {
-        panic!("Unexpected address {address}")
-    }
-}
-```
-
-When `address == 0`, there was no memory operation this cycle and the cell is `None`.
-Otherwise the remapped address is $(\texttt{byte\\\_address} - \texttt{base}) / 8$, and the cell stores digit $i$ of that value.
-
-The witness generation ([`witness.rs:117`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L117)):
-
-```rust
-CommittedPolynomial::RamRa(idx) => {
-    let row: Vec<Option<usize>> = row_cycles
-        .iter()
-        .map(|cycle| {
-            remap_address(
-                cycle.ram_access().address() as u64,
-                &preprocessing.memory_layout,
-            )
-            .map(|address| one_hot_params.ram_address_chunk(address, *idx) as usize)
-        })
-        .collect();
-    PCS::process_chunk_onehot(setup, one_hot_params.k_chunk, &row)
-}
-```
-
-The key difference from the other two families: **not every cycle accesses RAM**.
-When `remap_address` returns `None`, the cell is `None` -- meaning the entire row of the one-hot matrix is zero (no column is hot).
-This makes `RamRa` a *sparse* one-hot polynomial.
-
-Also note: the `CommittedPolynomial` enum comment ([`witness.rs:36`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L36)) confirms that for RAM, the read-address and write-address polynomials are the same, because there is at most one load or store per cycle.
-
-
-### Summary Table
-
-| Polynomial | Count ($\log T < 25$ / $\geq 25$) | Shape per cycle | Sparse? |
-|---|---|---|---|
-| `RdInc` | $1$ | signed integer | No |
-| `RamInc` | $1$ | signed integer | No ($0$ for non-writes) |
-| `InstructionRa(i)` | $32$ / $16$ | one-hot row of width $K_\\text{chunk}$ | No |
-| `BytecodeRa(i)` | $\lceil \log_2 K_\\text{bc} / 4 \rceil$ / $\lceil \log_2 K_\\text{bc} / 8 \rceil$ | one-hot row of width $K_\\text{chunk}$ | No |
-| `RamRa(i)` | $\lceil \log_2 K_\\text{ram} / 4 \rceil$ / $\lceil \log_2 K_\\text{ram} / 8 \rceil$ | one-hot row of width $K_\\text{chunk}$ | **Yes** |
-
-All polynomials are committed before any sumcheck rounds begin.
 
 ## THIS OLD AND I WILL Re-work this work into a blog.
 
