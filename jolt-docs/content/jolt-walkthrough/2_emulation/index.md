@@ -14,23 +14,29 @@ sequenceDiagram
 
 {% end %}
 
-The goal of this phase is to go from a sequence of instructions in Jolt assembly to a trace of execution.
+The goal of this chapter is to go from a sequence of instructions in Jolt assembly to a trace of execution, and then to a set of data structures which we will refer to as committed and virtual polynomials. 
+We refer to them as polynomials because that's exactly what they are, but in this chapter, quite intentionally we will refer to them as data structures - or more specifically arrays and matrices. 
 As we are emulating an entire CPU there is a lot of code that gets run in this section. 
-However, as this series is about understanding how Jolt works, and not so much how it is implemented exactly, we abstract over some implementation details — such as how we implemented a memory-efficient tracer.
+However, as this series is about understanding "how Jolt works", and not so much how it is implemented exactly, we abstract over some implementation details — such as how they implemented a memory-efficient tracer.
 
 In the [Jolt Blog](@/blog/_index.md) series we cover implementation details which discuss several optimisations made to make sure the Jolt prover runs as fast as possible.
-Still we will outline the code sections that get invoked, so the interested reader can investigate in their own time.
-The mental model for this section is the following.
+Still we will briefly outline the code sections that get invoked, so the interested reader can investigate in their own time, and validate that the written word in this chapter does indeed reflect reality.
+
+The mental model for emulation is what you would expect of a physical CPU.
 
 ![Gekki](./mental_model.svg)
 
 TODO: A little excerpt on what this image shows -- leave it be for now
 
+To internalise this trace generation process let us look at a couple actual real world Jolt instructions being traced. 
+
 ## Worked Out Examples
 
-To best understand what the `trace` data structure captures, it is best to work through a few examples. 
-In what follows, the name of registers in the RISC-V assembly and the Jolt assembly is slightly different.
-Here is a partial map that enables us to walk through both sets of code.
+
+In what follows, we describe the RiSCV instruction, the corresponding Jolt Assembly version of the RISC instruction, and then its execution trace. 
+As the name of registers in the RISC-V assembly and the Jolt assembly is slightly different, 
+we give a partial map that enables us to walk through both sets of code.
+
 
 | Number | ABI Name | Purpose |
 |--------|----------|---------|
@@ -234,7 +240,8 @@ asm.emit_virtual::<VirtualSRAI>(self.operands.rd, self.operands.rd, 56);
 
 ## The RISCVCycle Data Structure
 
-The Cycle data structure is exactly what we said it was -- it's a bookkeeping device. 
+So there it is the trace is really a list of record of what the CPU did per instruction (padded with `No-OP`s to make the length a power of 2).
+If we wanted to examine the `Cycle` struct in code - it's a bookkeeping device. 
 We list the instruction being run, the registers being used, the immediate values, and the before and after state of all the registers that change; and the before/after state of memory.
 That's all there is to it.
 
@@ -308,15 +315,23 @@ pub enum RAMAccess {
 }
 ```
 
-So what the Jolt CPU does (and we do not cover how in this section) is take all the instructions in Jolt assembly, execute them, and create a record of what it did.
+
+{% theorem(type="box") %}
+
+**Summarising**: So what the Jolt CPU does (and we do not cover how in this section) is take all the instructions in Jolt assembly, execute them, and create a record of what it did.
 This record will act as the ground truth of what the Jolt VM did when given a user program.
 If the reader is interested in looking into the block of code that actually executes each Jolt instruction they can inspect 
 
+All we need to remember, is that Jolt took the user program compiled it to Jolt assembly, executed each instruction, and kept a log of everything it did at every time step.
+Jolt also saves the initial state of memory, and the final state of memory after all instructions are run.
+From this `trace` (executions) and `memory` initial, and final -- we will create the following data structures: 
 
 
-In `tracer/src/instruction/mod.rs` we describe how the tracer should trace each instruction.
+{% end %}
+
+If the reader wanted to better understand how exactly we emulate each instruction, we refer you to `tracer/src/instruction/mod.rs`.
 It essentially relies on the execute function we write for each instruction.
-This is where looking athe operands or formatting will be useful.
+This is where looking a the operands or formatting will be useful.
 
 ```rust
     fn trace(&self, cpu: &mut Cpu, trace: Option<&mut Vec<Cycle>>) {
@@ -352,16 +367,6 @@ fn capture_pre_execution_state(&self, state: &mut Self::RegisterState, cpu: &mut
 ```
 
 
-The details of emulation is not terribly important for understanding the next steps. 
-
-{% theorem(type="box") %}
-
-All we need to remember, is that Jolt took the user program compiled it to Jolt assembly, executed each instruction, and kept a log of everything it did at every time step.
-Jolt also saves the initial state of memory, and the final state of memory after all instructions are run.
-From this `trace` (executions) and `memory` initial, and final -- we will create the following data structures: 
-
-{% end %}
-
 
 ## Jolt Specific Data Structures.
 
@@ -371,8 +376,8 @@ The inputs to to this phase, our simply the `trace` vector and the initial and f
 
 {% theorem(type="box") %}
 
-There is a large body of code that is present in between the data structures we define, and this step. 
-Once again we are abstracting implementation details. 
+There is a large body of code that gets us from a trace to the data structures we are about to define.
+Once again we are abstracting implementation details, as we want to get to how the conceptual core of proving. 
 Later in a more specific blog post, we will detail how the prover was implemented. 
 
 {% end %}
@@ -391,8 +396,6 @@ They are named
 
 Before proceeding to describe what these data structures look like, we introduce some notation.
 Let $T$ be the length of the `trace` padded with `NoOp` cycles to make $T$ a power of 2.
-In Jolt, multilinear polynomials are represented by storing their evaluations over the Boolean hypercube $\\{0,1\\}^{\log T}$.
-So when we write `RdInc[j]`, we mean the evaluation of the polynomial at the $j$-th point of the hypercube -- which is just the $j$-th entry of a length-$T$ array.
 
 These five polynomial families are all variants of the `CommittedPolynomial` enum ([`witness.rs:22`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L22)):
 
@@ -409,17 +412,11 @@ pub enum CommittedPolynomial {
 
 ### 1. `RdInc` -- Register Increment Polynomial
 
-A length-$T$ array of signed integers.
+A length-$T$ array of `i128` (signed integers).
 
 **Cell $j$** stores how much the destination register changed at cycle $j$:
 - If cycle $j$ wrote to a register: $\texttt{RdInc}[j] = \texttt{rd\\\_post} - \texttt{rd\\\_pre}$
 - If cycle $j$ did not write any register (NoOp or read-only): $\texttt{RdInc}[j] = 0$
-
-```
-RdInc:  [ Δrd₀,  Δrd₁,  0,  Δrd₃,  0,  ...  0 ]
-
-Δrdⱼ = rd_post - rd_pre at cycle j  (0 when no register is written)
-```
 
 This is computed in [`witness.rs:75`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L75):
 
@@ -436,23 +433,49 @@ CommittedPolynomial::RdInc => {
 }
 ```
 
-The `rd_write()` method ([`tracer/src/instruction/mod.rs:479`](https://github.com/a16z/jolt/blob/main/tracer/src/instruction/mod.rs#L479)) returns `Option<(rd_index, pre_value, post_value)>` -- `None` for NoOps and read-only instructions, causing `unwrap_or_default()` to produce `(0, 0, 0)` and hence a difference of 0.
+
+where `rd_write()` calls 
+
+```rust
+if let Some((rd_pre_val, rd_post_val)) = cycle.register_state.rd_values() 
+```
+
+defined in `jolt/tracer/src/instruction/mod.rs` which we know from the implemented trait below just returns the before after values.
+
+```rust
+
+pub trait InstructionRegisterState:
+    Default + Copy + Clone + Serialize + DeserializeOwned + Debug
+{
+    #[cfg(any(feature = "test-utils", test))]
+    fn random(rng: &mut rand::rngs::StdRng, operands: &NormalizedOperands) -> Self;
+    fn rs1_value(&self) -> Option<u64> {
+        None
+    }
+    fn rs2_value(&self) -> Option<u64> {
+        None
+    }
+    fn rd_values(&self) -> Option<(u64, u64)> {
+        None
+    }
+}
+```
+
+
+{% theorem(type="box") %}
+So that's all there is to the `RdInc` data structure. It is an array of length number of Jolt Instructions (padded to a power of 2) which at location $j$ contains the difference between the start and finish values of the destination register written to at time $j$.
+{% end %}
+
 
 ### 2. `RamInc` -- RAM Increment Polynomial
 
-A length-$T$ array of signed integers. Same idea as `RdInc`, but for RAM.
+From the above example, you can already guess that `RamInc` will be similar. Instead of destination register, this will store in cell $j$ the before and after values at memory location updated by the $j$'th Jolt instruction,. 
 
 **Cell $j$** stores how much memory changed at cycle $j$:
 - If cycle $j$ was a store (write): $\texttt{RamInc}[j] = \texttt{post\\\_value} - \texttt{pre\\\_value}$
 - If cycle $j$ was a load (read) or NoOp: $\texttt{RamInc}[j] = 0$
 
 Loads contribute 0 because a load does not change memory.
-
-```
-RamInc: [ 0,  Δmem₁,  0,  0,  Δmem₄,  ...  0 ]
-
-Δmemⱼ = post_value - pre_value at cycle j  (0 when cycle is not a store)
-```
 
 This is computed in [`witness.rs:85`](https://github.com/a16z/jolt/blob/main/jolt-core/src/zkvm/witness.rs#L85):
 
@@ -471,11 +494,17 @@ CommittedPolynomial::RamInc => {
 }
 ```
 
-Only the `Write` variant produces a nonzero value; `Read` and `NoOp` both map to 0.
+Only the `Write` variant of `RAMAccess` produces a nonzero value; `Read` and `NoOp` both map to 0.
 
 ### One-Hot Encoding and the Decomposition into $d$ Chunks
 
-The remaining three polynomial families -- `InstructionRa`, `BytecodeRa`, and `RamRa` -- all follow the same pattern, so it is worth explaining the idea once before diving into each.
+Now we into get something more involved. 
+The remaining three data structures -- `InstructionRa`, `BytecodeRa`, and `RamRa` -- have a parameter $d$ associated with them. 
+We will set $d=1$ for now, and re-introduce the general version in a bit.
+To best understand what is going on it's better to talk about a different version of the above data structures. 
+Let's use `BytecodeRa` as the motivating example, which we refer to simple as `ra` for short. 
+First we will define another array called `raf` of size $T$, where `raf[j]` stores the PC address of the $j$'th instruction. 
+
 
 Consider `BytecodeRa` as a motivating example (the others work identically).
 At each cycle $t$, the CPU fetches an instruction from some bytecode address.
