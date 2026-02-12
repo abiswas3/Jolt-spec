@@ -552,211 +552,38 @@ So let's get to that.
 
 For this section, we will describe the `Raf` version of the `Ra` data structure. 
 We already know how to go from `Raf` to `Ra` by the above description. 
-That part is the exact same. 
+That part is the exact same.
 
+`RamRaf` is an array of size $T$ (length of `trace` padded to the next power of 2) - where `RamRaf[t] = Addr as u64`, where `Addr` is the address the instruction is loading or storing bytes to and from.
+If the instruction for time $t$ is not interacting with memory, we set `Addr = 0`. 
+Of course, base on the lowest and highest memory address the trace accesses, we get a size of memory we need to maintain which defines $K$ -- the length of rows in one-hot encoded form.
+If this $K$ is very large -- there is a corresponding $d$ again. 
+But this is exactly as what we described above. 
 
-## THIS OLD AND I WILL Re-work this work into a blog.
+### 5. `InstructionRa(d)` 
 
-Ignore everything from here on. 
+Once again we only discuss the `Raf` version. 
+To understand `InstructionRaf` we need to understand fundamental concept in Jolt.
+Consider the instructuon `AND a3, a4, a5` where we are storing in register `a3` the bitwise AND of values in `a4` and `a5a`. 
+Further, `a4= 10 as u64` and `a5 = 123 as u64`. 
+The Jolt thing to do is make giant table of size $2^{128}$ (we don't acatually manifest this table, but for where we are in this tutorial, pretend that we do). 
+128 bits as the inputs are 64 bits each, so the product space is of size $2^{128}$.
+This table stores the `AND(x,y)` output of every possible values of $x$ and $y$. 
+In the above example above $x=10$ and $y=123$ as 64 bitstrings.
+So for this $x$ and $y$ there will be a single row of the giant table that has the correct answer. 
 
-So far we have not discussed any details of what constitutes a proof besides stating in the overview that we will get a system of polynomial equations. 
-We will not get to polynomial equations in this section, but we will get to all the data structures we can construct polynomial equations, in the remainder of this document. 
-
-Let's work backwards and focus on the following snipped in file `jolt-core/benches/e2e_profiling.rs`
-
-The first snippet is constructing a `JoltCpuProver`. 
-The next step asks this prover to prove that it ran the program correctly.
-```rust
-let prover = RV64IMACProver::gen_from_elf(
-            &preprocessing,
-            elf_contents,
-            &serialized_input,
-            &[],
-            &[],
-            None,
-            None,
-        );
-        let program_io = prover.program_io.clone();
-        let (jolt_proof, _) = prover.prove();
-
-```
-
-The declaration of the function is given asu 
-
-```rust
-pub fn gen_from_elf(
-        preprocessing: &'a JoltProverPreprocessing<F, PCS>, // See below
-        elf_contents: &[u8], // The RISC-V code in bytes
-        inputs: &[u8], // This will be 5 as a vector of bytes in our example.
-        untrusted_advice: &[u8],// Nothing passed []
-        trusted_advice: &[u8], // Nothing passed []
-        trusted_advice_commitment: Option<PCS::Commitment>, // None
-        trusted_advice_hint: Option<PCS::OpeningProofHint>, // None
-    )
-```
-
-We will defer to proving in the backend -- but this above function returns a `JoltCpuProver`. 
-Our main protagonist.
-
-```rust
-pub struct JoltCpuProver<
-    'a,
-    F: JoltField,
-    PCS: StreamingCommitmentScheme<Field = F>,
-    ProofTranscript: Transcript,
-> {
-    pub preprocessing: &'a JoltProverPreprocessing<F, PCS>,
-    pub program_io: JoltDevice,
-    pub lazy_trace: LazyTraceIterator,
-    pub trace: Arc<Vec<Cycle>>,
-    pub advice: JoltAdvice<F, PCS>,
-    /// The advice claim reduction sumcheck effectively spans two stages (6 and 7).
-    /// Cache the prover state here between stages.
-    advice_reduction_prover_trusted: Option<AdviceClaimReductionProver<F>>,
-    /// The advice claim reduction sumcheck effectively spans two stages (6 and 7).
-    /// Cache the prover state here between stages.
-    advice_reduction_prover_untrusted: Option<AdviceClaimReductionProver<F>>,
-    pub unpadded_trace_len: usize,
-    pub padded_trace_len: usize,
-    pub transcript: ProofTranscript,
-    pub opening_accumulator: ProverOpeningAccumulator<F>,
-    pub spartan_key: UniformSpartanKey<F>,
-    pub initial_ram_state: Vec<u64>,
-    pub final_ram_state: Vec<u64>,
-    pub one_hot_params: OneHotParams,
-    pub rw_config: ReadWriteConfig,
-}
-```
-
-There is a lot going on. Some fields seem familiar, while others seem to have come out of the blue from nowhere. 
-Let's start with what we understand: 
-
-1. `trace`: The list of bookeeping records we've discussed ad nauseam. 
-2. `lazy_trace`: A clever way to iterate the trace. We do not need to focus on what's clever about it for now. 
-4. `unpadded_trace_len`: Length of the trace. 
-5. `paddeed_trace_len`: Length of trace padded with `NOOPS` to the next power of 2. 
-6. `proof_transcript` : We have no discussed this, but think of this as an empty log file (we have not proven anything). We will write the proof to this log. 
-7. `initial_ram_state`: Memory before program execution
-8. `final_ram_state`: Memory after program finished. 
-
-
-This leaves us with 
-
-1. `preprocessing`
-2. `program_io`
-3. `advice`
-4. `advice_reduction_prover_untrusted`
-5. `advice_reduction_prover_trusted`
-6. `opening_accumulator`
-7. `spartan_key`
-8. `one_hot_params`
-9. `rw_config`
-
-Let's get rid of a few easy ones, digging deeper into the implementations we find, when initialisng the `JoltCPUProver` we have 
-
-```rust
-//...
- advice: JoltAdvice {
-                untrusted_advice_polynomial: None,
-                trusted_advice_commitment, // set to None in args
-                trusted_advice_polynomial: None,
-                untrusted_advice_hint: None,
-                trusted_advice_hint, // set to None in args
-            },
-advice_reduction_prover_trusted: None,
-advice_reduction_prover_untrusted: None,
-//.. 
-```
-
-`program_io` is relatively simple. It captures user inputs and outputs to Jolt and is given by 
-
-```rust
-TODO:
-```
-`pre_processing` is not terribly interesting either -- it's more bookeeping, and we discuss it at the end for completeness. 
-Think of this as things both the user and prover will know and keep track of. 
-
-So all of this is just `None` and we can forget about this for now.
-We will get to `preprocessing` and `program_io` in a 
-
-
-The `UniformSpartanKey` stores 2 numbers and a hash, we can ignore the hash for now as that has to do with the verifier. 
-We are only interested in proving for now. 
-`num_cons_total`=$T \times M$ where $T$ is the number of cycles (padded to a power of 2) and $M$ is the number of constraints known as the `R1CS` constraints. 
-Remember when we said proving will eventually boil down to constructing some equalities -- these will be the first set of constraints (but sadly not all) that we **MUST** satisfy. 
-We will discuss them in great detail in the next chapter on [Constraints](@/jolt-walkthrough/constraints/index.md). 
-For now we just there that $M$ of them and move on. 
-
-```rust
-#[derive(Clone, Copy, CanonicalSerialize, CanonicalDeserialize)]
-pub struct UniformSpartanKey<F: JoltField> {
-    /// Number of constraints across all steps padded to nearest power of 2
-    pub num_cons_total: usize,
-
-    /// Number of steps padded to the nearest power of 2
-    pub num_steps: usize,
-
-    /// Digest of verifier key
-    pub(crate) vk_digest: F,
-}
-```
-
-`OneHotParams` is also just a bunch of numbers. 
-These numbers will make a lot of sense when we get to discussing memory-checking arguments. 
-All a memory checking argument is that it allows us to check if the instruction was supposed to write $X$ to address $A$ or read $Y$ from location $B$ -- it did so.
-Foreshadowing the future, we will write that check as a polynomial equation as well, for practical purposes related to polynomial commitment schemes these numbers will become clearer. 
-Still we list what it is for completeness. 
-
-```rust
-#[derive(Allocative, Clone, Debug, Default)]
-pub struct OneHotParams {
-    pub log_k_chunk: usize,
-    pub lookups_ra_virtual_log_k_chunk: usize,
-    pub k_chunk: usize,
-
-    pub bytecode_k: usize,
-    pub ram_k: usize,
-
-    pub instruction_d: usize,
-    pub bytecode_d: usize,
-    pub ram_d: usize,
-
-    instruction_shifts: Vec<usize>,
-    ram_shifts: Vec<usize>,
-    bytecode_shifts: Vec<usize>,
-}
-```
-
-
-```rust
-/// Configuration for read-write checking sumchecks.
-///
-/// Contains parameters that control phase structure for RAM and register
-/// read-write checking sumchecks. All fields are `u8` to minimize proof size.
-#[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct ReadWriteConfig {
-    /// RAM read-write checking: number of cycle variables to bind in phase 1.
-    pub ram_rw_phase1_num_rounds: u8,
-
-    /// RAM read-write checking: number of address variables to bind in phase 2.
-    pub ram_rw_phase2_num_rounds: u8,
-
-    /// Registers read-write checking: number of cycle variables to bind in phase 1.
-    pub registers_rw_phase1_num_rounds: u8,
-
-    /// Registers read-write checking: number of address variables to bind in phase 2.
-    pub registers_rw_phase2_num_rounds: u8,
-}
-```
-
-We do not discuss the `OpeningAccumulator` as we will cover it in detail during the sum-checks. 
-
-### Preprocessing 
-
+{% theorem(type="box") %}
+This what we are about to describe is at the heart of the Jolt zk-VM. 
+Almost every instruction is secretly a lookup into a giant table. 
+So just like for `RamRa` at timestep $t$ we store the address read at time $t$, here we will take our two 64 bit inputs $x$ and $y$ and make an address out of it by interleaving the bits. 
+See example
 TODO:
 
-## Appendices
+So `InstructionRaf` also stores an address -- an address formed by taking the inputs and making an address out of it. 
+At this address, in our giant table lies the answer to output that is stored in destination register `a3`.
+{% end %}
 
-### Appendix A: The Entire Trace File 
+There are two more things -- called truted and untrusted advice that we need to construct. 
+But for now we ignore them.
+We'll get back to them we promise.
 
-TODO:
