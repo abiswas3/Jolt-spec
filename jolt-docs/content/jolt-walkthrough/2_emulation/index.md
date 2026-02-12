@@ -33,8 +33,8 @@ To internalise this trace generation process let us look at a couple actual real
 ## Worked Out Examples
 
 
-In what follows, we describe the RiSCV instruction, the corresponding Jolt Assembly version of the RISC instruction, and then its execution trace. 
-As the name of registers in the RISC-V assembly and the Jolt assembly is slightly different, 
+In what follows, we describe the RISC-V instruction, the corresponding Jolt Assembly version of the RISC-V instruction, and then its execution trace.
+As the names of registers in the RISC-V assembly and the Jolt assembly are slightly different,
 we give a partial map that enables us to walk through both sets of code.
 
 
@@ -72,7 +72,7 @@ let (_lazy_trace, trace, _, program_io) = program.trace(&serialized_input, &[], 
 
 There is no virtual expansion to deal with. 
 The program counter is at `pc= 2147483648 = 0x80000000`. 
-The instruction sets the destination register `rd = pc + (imm << 12)`. In the Jolt assembly format, the shift is already applied and stored in the immediate field.
+In RISC-V, AUIPC sets `rd = pc + (imm << 12)`. In the Jolt assembly format, the shift is already applied and stored in the immediate field, so the computation is simply `rd = pc + imm`.
 So after execution, the only change to the system we expect is that the stack pointer `sp` (register `x2` in Jolt) is updated.
 
 ```rust
@@ -117,7 +117,7 @@ Now the disassembler gives us a hint that the contents of `a0 + 0 = 0x7FFFA000 =
 So we are reading at the right address, and we read all 64 bits of memory starting at that address.
 In Line 3 we see that we have `ram_access: RAMRead { address: 2147459072, value: 1619328 }`
 
-So the memory looks like this: as `1619328 = 0x18B580`
+So the memory looks like this (`1619328 = 0x18B580`):
 
 
 | LSB |  |  |  |  |  |  | MSB |
@@ -153,7 +153,7 @@ Interpreted as an unsigned 64-bit integer, it would be `18446744073709551488`.
 ```
 
 
-Now if you look at the last `rd` value in the instruction we see it has `18446744073709551488`
+Now if you look at the last `rd` value in the instruction we see it has `18446744073709551488`.
 We step through the trace to illustrate this.
 
 #### Step 1: ADDI - Get effective address
@@ -179,7 +179,7 @@ Loads a 64-bit value from memory into register `rd` for RV64I.
 
 ```rust
 asm.emit_ld::<LD>(*v_dword, *v_dword_address, 0);
-// v_dword = 0x0000000000018B580 = 1619328
+// v_dword = 0x000000000018B580 = 1619328
 //             MSB                                              LSB
 // v_dword = | 0x00 | 0x00 | 0x00 | 0x00 | 0x00 | 0x18 | 0xB5 | 0x80 |
 // Confirmed: RegisterStateFormatLoad { rd: (0, 1619328), rs1: 2147459072 }
@@ -219,7 +219,7 @@ Multiplies v_dword by 2^56, effectively shifting the target byte to the MSB posi
 
 ```rust
 asm.emit_r::<MUL>(self.operands.rd, *v_dword, *v_pow2);
-// v_dword = 0x0000000000018B580 * 2^56 = 0x8000000000000000
+// v_dword = 0x000000000018B580 * 2^56 = 0x8000000000000000
 // rd = | 0x80 | 0x00 | 0x00 | 0x00 | 0x00 | 0x00 | 0x00 | 0x00 |
 // Confirmed: RegisterStateFormatR { rd: (0, 9223372036854775808), rs1: 1619328, rs2: 72057594037927936 }
 ```
@@ -240,7 +240,7 @@ asm.emit_virtual::<VirtualSRAI>(self.operands.rd, self.operands.rd, 56);
 
 ## The RISCVCycle Data Structure
 
-So there it is the trace is really a list of record of what the CPU did per instruction (padded with `No-OP`s to make the length a power of 2).
+So there it is — the trace is really a list of records of what the CPU did per instruction (padded with `No-OP`s to make the length a power of 2).
 If we wanted to examine the `Cycle` struct in code - it's a bookkeeping device. 
 We list the instruction being run, the registers being used, the immediate values, and the before and after state of all the registers that change; and the before/after state of memory.
 That's all there is to it.
@@ -272,7 +272,7 @@ pub struct RISCVCycle<T: RISCVInstruction> {
 }
 ```
 
-where we have already covered instruction in detail (see [Jolt ISA](@/references/jolt-isa.md)).
+where we have already covered instructions in detail (see [Jolt ISA](@/references/jolt-isa.md)).
 `RegisterState` is just any type that implements the trait 
 
 ```rust
@@ -320,18 +320,17 @@ pub enum RAMAccess {
 
 **Summarising**: So what the Jolt CPU does (and we do not cover how in this section) is take all the instructions in Jolt assembly, execute them, and create a record of what it did.
 This record will act as the ground truth of what the Jolt VM did when given a user program.
-If the reader is interested in looking into the block of code that actually executes each Jolt instruction they can inspect 
+If the reader is interested in looking into the block of code that actually executes each Jolt instruction, they can inspect `tracer/src/instruction/mod.rs`.
 
-All we need to remember, is that Jolt took the user program compiled it to Jolt assembly, executed each instruction, and kept a log of everything it did at every time step.
+All we need to remember is that Jolt took the user program, compiled it to Jolt assembly, executed each instruction, and kept a log of everything it did at every time step.
 Jolt also saves the initial state of memory, and the final state of memory after all instructions are run.
-From this `trace` (executions) and `memory` initial, and final -- we will create the following data structures: 
-
+From this `trace` (executions) and the initial and final memory state, we will create the data structures described below.
 
 {% end %}
 
 If the reader wanted to better understand how exactly we emulate each instruction, we refer you to `tracer/src/instruction/mod.rs`.
 It essentially relies on the execute function we write for each instruction.
-This is where looking a the operands or formatting will be useful.
+This is where looking at the operands or formatting will be useful.
 
 ```rust
     fn trace(&self, cpu: &mut Cpu, trace: Option<&mut Vec<Cycle>>) {
@@ -372,12 +371,12 @@ fn capture_pre_execution_state(&self, state: &mut Self::RegisterState, cpu: &mut
 
 We have finished executing the program -- and generated a `trace` that records everything we have done. 
 The next thing we want to do is use this trace to construct a few data structures that facilitate proving. 
-The inputs to to this phase, our simply the `trace` vector and the initial and final memory state. 
+The inputs to this phase are simply the `trace` vector and the initial and final memory state.
 
 {% theorem(type="box") %}
 
 There is a large body of code that gets us from a trace to the data structures we are about to define.
-Once again we are abstracting implementation details, as we want to get to how the conceptual core of proving. 
+Once again we are abstracting implementation details, as we want to get to the conceptual core of proving.
 Later in a more specific blog post, we will detail how the prover was implemented. 
 
 {% end %}
@@ -390,9 +389,9 @@ They are named
 
 1. `RdInc`
 2. `RamInc`
-3. `InstructionRa(d)`
-4. `BytecodeRa(d)`
-5. `RamRa(d)`
+3. `BytecodeRa(d)`
+4. `RamRa(d)`
+5. `InstructionRa(d)`
 
 Before proceeding to describe what these data structures look like, we introduce some notation.
 Let $T$ be the length of the `trace` padded with `NoOp` cycles to make $T$ a power of 2.
@@ -403,9 +402,9 @@ These five polynomial families are all variants of the `CommittedPolynomial` enu
 pub enum CommittedPolynomial {
     RdInc,
     RamInc,
-    InstructionRa(usize),
     BytecodeRa(usize),
     RamRa(usize),
+    InstructionRa(usize),
     // ...
 }
 ```
@@ -440,26 +439,7 @@ where `rd_write()` calls
 if let Some((rd_pre_val, rd_post_val)) = cycle.register_state.rd_values() 
 ```
 
-defined in `jolt/tracer/src/instruction/mod.rs` which we know from the implemented trait below just returns the before after values.
-
-```rust
-
-pub trait InstructionRegisterState:
-    Default + Copy + Clone + Serialize + DeserializeOwned + Debug
-{
-    #[cfg(any(feature = "test-utils", test))]
-    fn random(rng: &mut rand::rngs::StdRng, operands: &NormalizedOperands) -> Self;
-    fn rs1_value(&self) -> Option<u64> {
-        None
-    }
-    fn rs2_value(&self) -> Option<u64> {
-        None
-    }
-    fn rd_values(&self) -> Option<(u64, u64)> {
-        None
-    }
-}
-```
+defined in `jolt/tracer/src/instruction/mod.rs` — which we know from the `InstructionRegisterState` trait shown above just returns the before and after values.
 
 
 {% theorem(type="box") %}
@@ -469,7 +449,7 @@ So that's all there is to the `RdInc` data structure. It is an array of length n
 
 ### 2. `RamInc` -- RAM Increment Polynomial
 
-From the above example, you can already guess that `RamInc` will be similar. Instead of destination register, this will store in cell $j$ the before and after values at memory location updated by the $j$'th Jolt instruction,. 
+From the above example, you can already guess that `RamInc` will be similar. Instead of the destination register, this will store in cell $j$ the difference between the before and after values at the memory location updated by the $j$'th Jolt instruction.
 
 **Cell $j$** stores how much memory changed at cycle $j$:
 - If cycle $j$ was a store (write): $\texttt{RamInc}[j] = \texttt{post\\\_value} - \texttt{pre\\\_value}$
@@ -498,11 +478,11 @@ Only the `Write` variant of `RAMAccess` produces a nonzero value; `Read` and `No
 
 ### 3. `BytecodeRa(d)`
 
-Now we into get something more involved. 
-The remaining three data structures -- `InstructionRa`, `BytecodeRa`, and `RamRa` -- have a parameter $d$ associated with them. 
+Now we get into something more involved.
+The remaining three data structures -- `BytecodeRa`, `RamRa`, and `InstructionRa` -- have a parameter $d$ associated with them.
 We will set $d=1$ for now, and re-introduce the general version in a bit.
 To best understand what is going on it's better to talk about a different version of the above data structures. 
-Let's use `BytecodeRa` as the motivating example, which we refer to simple as `ra` for short. 
+Let's use `BytecodeRa` as the motivating example, which we refer to simply as `ra` for short.
 First we will define another array called `raf` of size $T$, where `raf[j]` stores the PC address of the $j$'th instruction. 
 
 Consider the following toy example: 
@@ -518,7 +498,7 @@ In the figure J.I refers to Jolt Instruction.
 Then we show an example trace where we run Jolt Instructions 2, 3 and 1 in that order. 
 The `raf` array is just a size $T$ array where location $i$ stores what Jolt Instruction was read at cycle number $i$ in offset format (so don't store the physical address, but instead store the offset).
 `ra` is just `raf` stored in 1-hot encoding format.
-That's all there is too it.
+That's all there is to it.
 
 Now what happens when **$d > 1$?**
 
@@ -528,7 +508,7 @@ If we wanted to one-hot encode that in `ra` we would be looking at very very lon
 Note that this does not affect `raf` which in each cell is just a `u64` number -- it does not care if $K=4$ or $2^{32}$.
 It uses the same space. 
 Now we need to store this one hot encoded version of `raf` for this thing called polynomial commitments we will get to later, but for now assume that we NEED one hot encoding, but we also cannot afford to have very very long rows. 
-So here's what we will do -- we will write the number stored in cell/location of `raf` as a $d$ digit base $N$ number, where $N = K^{1/d}$. As $K$ is a power of 2, any even $d$ is fine.
+So here's what we will do -- we will write the number stored in cell/location of `raf` as a $d$ digit base $N$ number, where $N = K^{1/d}$. As $K$ is a power of 2, $d$ must divide $\log_2 K$ so that $N$ is also a power of 2.
 See figure below where $K=16$ and $d=2$ so we express addresses as a 2 digit base 4 number.
 
 ![](./BytecodeRaGreater.svg)
@@ -537,7 +517,7 @@ Once we do that -- we just store each digit as a one-hot encoded matrix.
 That's it -- there's a lot of code in the Jolt code base that essentially does this transformation. 
 
 {% theorem(type="box") %}
-In summary, `BytecodeRa` is stores $d$ matrices of dimension $T \times K^{1/d}$ where the rows of all matrices are one hot encoded.
+In summary, `BytecodeRa` stores $d$ matrices of dimension $T \times K^{1/d}$ where the rows of all matrices are one hot encoded.
 Row $i$, matrix $j$ denotes the $j$'th digit of the expanded Jolt PC stored in offset format. 
 {% end %}
 
@@ -548,7 +528,7 @@ The only thing that will be different is what the corresponding `InstructionRaf`
 So let's get to that. 
 
 
-### 5. `RamRa(i)` -- RAM Address One-Hot Polynomials
+### 4. `RamRa(d)` -- RAM Address One-Hot Polynomials
 
 For this section, we will describe the `Raf` version of the `Ra` data structure. 
 We already know how to go from `Raf` to `Ra` by the above description. 
@@ -556,34 +536,51 @@ That part is the exact same.
 
 `RamRaf` is an array of size $T$ (length of `trace` padded to the next power of 2) - where `RamRaf[t] = Addr as u64`, where `Addr` is the address the instruction is loading or storing bytes to and from.
 If the instruction for time $t$ is not interacting with memory, we set `Addr = 0`. 
-Of course, base on the lowest and highest memory address the trace accesses, we get a size of memory we need to maintain which defines $K$ -- the length of rows in one-hot encoded form.
+Of course, based on the lowest and highest memory address the trace accesses, we get a size of memory we need to maintain which defines $K$ -- the length of rows in one-hot encoded form.
 If this $K$ is very large -- there is a corresponding $d$ again. 
-But this is exactly as what we described above. 
+But this is exactly what we described above.
 
-### 5. `InstructionRa(d)` 
+### 5. `InstructionRa(d)` -- Instruction Lookup Address One-Hot Polynomials
 
 Once again we only discuss the `Raf` version. 
-To understand `InstructionRaf` we need to understand fundamental concept in Jolt.
-Consider the instructuon `AND a3, a4, a5` where we are storing in register `a3` the bitwise AND of values in `a4` and `a5a`. 
+To understand `InstructionRaf` we need to understand a fundamental concept in Jolt.
+Consider the instruction `AND a3, a4, a5` where we are storing in register `a3` the bitwise AND of values in `a4` and `a5`.
 Further, `a4= 10 as u64` and `a5 = 123 as u64`. 
-The Jolt thing to do is make giant table of size $2^{128}$ (we don't acatually manifest this table, but for where we are in this tutorial, pretend that we do). 
+The Jolt thing to do is make a giant table of size $2^{128}$ (we don't actually manifest this table, but for where we are in this tutorial, pretend that we do).
 128 bits as the inputs are 64 bits each, so the product space is of size $2^{128}$.
-This table stores the `AND(x,y)` output of every possible values of $x$ and $y$. 
-In the above example above $x=10$ and $y=123$ as 64 bitstrings.
+This table stores the `AND(x,y)` output for every possible value of $x$ and $y$.
+In the example above, $x=10$ and $y=123$ as 64-bit strings.
 So for this $x$ and $y$ there will be a single row of the giant table that has the correct answer. 
 
 {% theorem(type="box") %}
-This what we are about to describe is at the heart of the Jolt zk-VM. 
-Almost every instruction is secretly a lookup into a giant table. 
-So just like for `RamRa` at timestep $t$ we store the address read at time $t$, here we will take our two 64 bit inputs $x$ and $y$ and make an address out of it by interleaving the bits. 
-See example
-TODO:
-
-So `InstructionRaf` also stores an address -- an address formed by taking the inputs and making an address out of it. 
-At this address, in our giant table lies the answer to output that is stored in destination register `a3`.
+**This is at the heart of the Jolt zk-VM: almost every instruction is secretly a lookup into a giant table.** We will dive into the lookup nature of Jolt in great detail in later chapters.
 {% end %}
 
-There are two more things -- called truted and untrusted advice that we need to construct. 
+So just like for `RamRa` at timestep $t$ we store the address read at time $t$, here we will take our two 64-bit inputs $x$ and $y$ and make an address out of it by interleaving the bits.
+For example, let $x = 10$ and $y = 123$. We show only the lowest 8 bits since the upper 56 bits are all zero for both:
+
+```
+Bit position:     7    6    5    4    3    2    1    0
+
+x = 10  (64-bit): 0    0    0    0    1    0    1    0
+y = 123 (64-bit): 0    1    1    1    1    0    1    1
+
+Interleaved (128-bit):
+  x7 y7  x6 y6  x5 y5  x4 y4  x3 y3  x2 y2  x1 y1  x0 y0
+   0  0   0  1   0  1   0  1   1  1   0  0   1  1   0  1
+```
+
+Reading left to right, the interleaved address is `...00 01 01 01 11 00 11 01` in binary.
+This 128-bit address uniquely identifies the row in the giant `AND` table where the answer `AND(10, 123) = 2` lives.
+
+So `InstructionRaf` also stores an address -- an address formed by taking the inputs and making an address out of it.
+At this address, in our giant table lies the answer to output that is stored in destination register `a3`.
+
+{% theorem(type="box") %}
+There are two more things -- called trusted and untrusted advice -- that we need to construct.
 But for now we ignore them.
 We'll get back to them we promise.
+
+{% end %}
+
 
